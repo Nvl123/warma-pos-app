@@ -1,0 +1,6 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Dark theme variant - Compose handles actual theming -->
+    <style name="Base.Theme.WARMAPOS" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- Dark theme handled by Compose -->
+    </style>
+</resources>

@@ -1,0 +1,25 @@
+*.iml
+.gradle
+/local.properties
+.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Build outputs
+app/build/
+
+# IDE folders
+.kotlin/
+.vscode/
+
+# Build logs
+*.log
+build_*.txt
+compile_error.txt
+full_log.txt
+kotlin_errors.txt
+res_error.txt
