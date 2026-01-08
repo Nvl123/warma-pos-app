@@ -101,6 +101,30 @@ Mapping nama alternatif untuk produk:
 - **Restore Backup** - Pulihkan data dari file backup
 - **Export CSV** - Export produk ke format CSV
 
+### 📑 Kelompok Struk (Group Receipts)
+
+Fitur baru untuk mengelompokkan beberapa struk menjadi satu laporan:
+
+- **Pilih & Kelompokkan** - Pilih beberapa struk dan gabungkan menjadi satu kelompok
+- **Edit Kelompok** - Tambah atau hapus struk dari kelompok yang sudah ada
+- **Print Kelompok** - Cetak ringkasan kelompok struk (total gabungan)
+- **Grand Total** - Lihat total dari semua struk dalam kelompok
+
+**Cara Penggunaan:**
+
+1. Di tab **Riwayat**, tap tombol checklist (FAB) untuk masuk mode pilih
+2. Pilih struk yang ingin dikelompokkan
+3. Tekan **"Buat Kelompok"**
+4. Beri nama kelompok dan simpan
+
+### ♻️ Pakai Ulang Struk (Reuse Receipt)
+
+Load struk lama kembali ke keranjang untuk:
+
+- **Edit transaksi** - Ubah item dan buat transaksi baru
+- **Repeat order** - Buat pesanan yang sama dengan mudah
+- **Harga snapshot** - Menggunakan harga saat struk dibuat (bukan harga saat ini)
+
 ### 🌙 Tema Aplikasi
 
 Pilihan tema warna:
@@ -147,11 +171,13 @@ app/src/main/java/com/dicoding/warmapos/
 │   │   ├── CartItem.kt             # Cart item model
 │   │   ├── Receipt.kt              # Receipt & ReceiptItem
 │   │   ├── ReceiptDesign.kt        # Receipt customization
+│   │   ├── GroupedReceipt.kt       # Grouped receipts model
 │   │   └── OcrModels.kt            # OCR result models
 │   │
 │   └── repository/
 │       ├── ProductRepository.kt    # Product data management
 │       ├── ReceiptRepository.kt    # Receipt persistence
+│       ├── GroupedReceiptRepository.kt  # Grouped receipts persistence
 │       ├── SettingsRepository.kt   # App settings
 │       └── BackupRepository.kt     # Backup/restore logic
 │
