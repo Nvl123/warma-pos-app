@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -26,6 +28,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val productRepository = ProductRepository(application)
     private val synonymRepository = SynonymRepository(application)
     private val receiptRepository = ReceiptRepository(application)
+    private val groupedReceiptRepository = GroupedReceiptRepository()
     private val settingsRepository = SettingsRepository(application)
     private val backupRepository = BackupRepository(application)
 
@@ -57,6 +60,263 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _receiptDesign = MutableStateFlow(ReceiptDesign())
     val receiptDesign: StateFlow<ReceiptDesign> = _receiptDesign.asStateFlow()
+    
+    // Group Receipt State
+    private val _groupedReceipts = MutableStateFlow<List<GroupedReceipt>>(emptyList())
+    val groupedReceipts: StateFlow<List<GroupedReceipt>> = _groupedReceipts.asStateFlow()
+    
+    private val _isGroupSelectionMode = MutableStateFlow(false)
+    val isGroupSelectionMode: StateFlow<Boolean> = _isGroupSelectionMode.asStateFlow()
+    
+    private val _selectedReceiptPaths = MutableStateFlow<Set<String>>(emptySet())
+    val selectedReceiptPaths: StateFlow<Set<String>> = _selectedReceiptPaths.asStateFlow()
+
+    // ... existing initializers ...
+
+    fun loadGroupedReceipts() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val groups = groupedReceiptRepository.getGroupedReceipts()
+            _groupedReceipts.value = groups
+        }
+    }
+    
+    fun toggleGroupSelectionMode() {
+        _isGroupSelectionMode.value = !_isGroupSelectionMode.value
+        if (!_isGroupSelectionMode.value) {
+            _selectedReceiptPaths.value = emptySet()
+        }
+    }
+    
+    fun toggleReceiptSelection(path: String) {
+        val current = _selectedReceiptPaths.value.toMutableSet()
+        if (current.contains(path)) {
+            current.remove(path)
+        } else {
+            current.add(path)
+        }
+        _selectedReceiptPaths.value = current
+    }
+
+    fun createGroupedReceipt(name: String = "") {
+        viewModelScope.launch(Dispatchers.IO) {
+            val selectedPaths = _selectedReceiptPaths.value
+            if (selectedPaths.isEmpty()) return@launch
+            
+            val allReceipts = _receiptHistory.value
+            val selectedItems = allReceipts.filter { selectedPaths.contains(it.filePath) }
+            
+            if (selectedItems.isEmpty()) return@launch
+            
+            val timestamp = System.currentTimeMillis()
+            val totalAmount = selectedItems.sumOf { it.totalAmount }
+            val count = selectedItems.size
+            val defaultName = if (name.isNotBlank()) name else "Kelompok ${count} Struk"
+            
+            val snapshots = selectedItems.map { 
+                ReceiptSnapshot(
+                    id = File(it.filePath).name, // simplified ID from filename
+                    timestamp = it.timestamp,
+                    total = it.totalAmount
+                )
+            }
+            
+            val group = GroupedReceipt(
+                id = UUID.randomUUID().toString(),
+                timestamp = timestamp,
+                name = defaultName,
+                totalAmount = totalAmount,
+                receiptCount = count,
+                receiptPaths = selectedPaths.toList(),
+                receipts = snapshots
+            )
+            
+            try {
+                groupedReceiptRepository.saveGroupedReceipt(group)
+                withContext(Dispatchers.Main) {
+                    toggleGroupSelectionMode() // Exit selection mode
+                    loadGroupedReceipts() // Refresh list
+                    // Optional: Show success message
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to create group", e)
+            }
+        }
+    }
+    
+    fun deleteGroupedReceipt(group: GroupedReceipt) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (groupedReceiptRepository.deleteGroupedReceipt(group)) {
+                loadGroupedReceipts()
+            }
+        }
+    }
+
+    // State for adding to existing group
+    private val _editingGroupTarget = MutableStateFlow<GroupedReceipt?>(null)
+    val editingGroupTarget: StateFlow<GroupedReceipt?> = _editingGroupTarget.asStateFlow()
+
+    fun removeReceiptFromGroup(group: GroupedReceipt, receiptPath: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Remove receipt path from group
+                val updatedPaths = group.receiptPaths.filterNot { it == receiptPath }
+                
+                if (updatedPaths.isEmpty()) {
+                    // Delete the group if no more receipts
+                    groupedReceiptRepository.deleteGroupedReceipt(group)
+                } else {
+                    // Update group with new paths
+                    val receipts = updatedPaths.mapNotNull { path ->
+                        receiptRepository.loadReceipt(path)
+                    }
+                    val newTotal = receipts.sumOf { it.total }
+                    
+                    val updatedGroup = group.copy(
+                        receiptPaths = updatedPaths,
+                        receiptCount = updatedPaths.size,
+                        totalAmount = newTotal
+                    )
+                    groupedReceiptRepository.updateGroupedReceipt(updatedGroup)
+                }
+                loadGroupedReceipts()
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to remove receipt from group", e)
+            }
+        }
+    }
+
+    fun startAddingToGroup(group: GroupedReceipt) {
+        _editingGroupTarget.value = group
+        _isGroupSelectionMode.value = true
+        _selectedReceiptPaths.value = emptySet()
+    }
+
+    fun addReceiptsToExistingGroup() {
+        val targetGroup = _editingGroupTarget.value ?: return
+        val pathsToAdd = _selectedReceiptPaths.value
+        
+        if (pathsToAdd.isEmpty()) {
+            _editingGroupTarget.value = null
+            _isGroupSelectionMode.value = false
+            return
+        }
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Combine existing paths with new paths (avoiding duplicates)
+                val allPaths = (targetGroup.receiptPaths + pathsToAdd).distinct()
+                
+                // Load all receipts to calculate new total
+                val receipts = allPaths.mapNotNull { path ->
+                    receiptRepository.loadReceipt(path)
+                }
+                val newTotal = receipts.sumOf { it.total }
+                
+                val updatedGroup = targetGroup.copy(
+                    receiptPaths = allPaths,
+                    receiptCount = allPaths.size,
+                    totalAmount = newTotal
+                )
+                groupedReceiptRepository.updateGroupedReceipt(updatedGroup)
+                
+                withContext(Dispatchers.Main) {
+                    _editingGroupTarget.value = null
+                    _isGroupSelectionMode.value = false
+                    _selectedReceiptPaths.value = emptySet()
+                    _successMessage.value = "Struk berhasil ditambahkan ke kelompok"
+                }
+                loadGroupedReceipts()
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to add receipts to group", e)
+            }
+        }
+    }
+
+    fun cancelAddingToGroup() {
+        _editingGroupTarget.value = null
+        _isGroupSelectionMode.value = false
+        _selectedReceiptPaths.value = emptySet()
+    }
+
+    fun printGroupedReceipt(group: GroupedReceipt) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Load all receipts in this group
+                val receipts = group.receiptPaths.mapNotNull { path ->
+                    receiptRepository.loadReceipt(path)
+                }
+                
+                if (receipts.isEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _errorMessage.value = "Tidak ada struk dalam kelompok ini"
+                    }
+                    return@launch
+                }
+                
+                // Format and print grouped receipt
+                val design = _receiptDesign.value
+                val sdf = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                val currencyFormat = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("id", "ID"))
+                
+                val sb = StringBuilder()
+                sb.appendLine(design.storeName.ifEmpty { "POS WARMA" })
+                if (design.headerText.isNotEmpty()) sb.appendLine(design.headerText)
+                sb.appendLine("================================")
+                sb.appendLine("KELOMPOK STRUK: ${group.name}")
+                sb.appendLine("Tanggal: ${sdf.format(java.util.Date(group.timestamp))}")
+                sb.appendLine("================================")
+                sb.appendLine()
+                
+                // List each receipt
+                receipts.forEachIndexed { index, receipt ->
+                    val receiptTime = sdf.format(java.util.Date(receipt.timestamp))
+                    sb.appendLine("Struk #${index + 1}")
+                    sb.appendLine("  Waktu: $receiptTime")
+                    sb.appendLine("  Items: ${receipt.items.sumOf { it.quantity }}")
+                    sb.appendLine("  Total: ${currencyFormat.format(receipt.total)}")
+                    sb.appendLine("--------------------------------")
+                }
+                
+                sb.appendLine()
+                sb.appendLine("================================")
+                sb.appendLine("TOTAL: ${receipts.size} STRUK")
+                sb.appendLine("GRAND TOTAL: ${currencyFormat.format(group.totalAmount)}")
+                sb.appendLine("================================")
+                sb.appendLine()
+                if (design.footerText.isNotEmpty()) sb.appendLine(design.footerText)
+                sb.appendLine()
+                sb.appendLine()
+                
+                // Use EscPosBuilder for printing
+                val builder = com.dicoding.warmapos.bluetooth.EscPosBuilder()
+                builder.init()
+                builder.alignCenter()
+                
+                // Print each line
+                sb.toString().lines().forEach { line ->
+                    builder.printLine(line)
+                }
+                
+                builder.feed(3)
+                builder.cut()
+                
+                val result = printerManager.sendRaw(builder.build())
+                
+                withContext(Dispatchers.Main) {
+                    if (result.isSuccess) {
+                        _successMessage.value = "Kelompok struk berhasil dicetak"
+                    } else {
+                        _errorMessage.value = "Gagal mencetak: ${result.exceptionOrNull()?.message}"
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error printing grouped receipt", e)
+                withContext(Dispatchers.Main) {
+                    _errorMessage.value = "Gagal mencetak: ${e.message}"
+                }
+            }
+        }
+    }
 
     private val _kasirName = MutableStateFlow("Kasir")
     val kasirName: StateFlow<String> = _kasirName.asStateFlow()
@@ -502,6 +762,54 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSuccess() {
         _successMessage.value = null
+    }
+    
+    fun loadReceiptHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val history = receiptRepository.getReceiptHistory()
+            _receiptHistory.value = history
+        }
+    }
+
+    fun deleteReceipt(item: ReceiptHistoryItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (receiptRepository.deleteReceipt(item.filePath)) {
+                loadReceiptHistory()
+            }
+        }
+    }
+
+    fun reprintReceipt(item: ReceiptHistoryItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val receipt = receiptRepository.loadReceipt(item.filePath)
+            if (receipt != null) {
+                receiptPrinter.printReceipt(receipt, _receiptDesign.value)
+            }
+        }
+    }
+
+    fun reuseReceipt(item: ReceiptHistoryItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val receipt = receiptRepository.loadReceipt(item.filePath)
+            if (receipt != null) {
+                val newCartItems = receipt.items.map { receiptItem ->
+                    val product = Product(
+                        name = receiptItem.name,
+                        sku = receiptItem.sku,
+                        price = receiptItem.price,
+                        unit = receiptItem.unit
+                    )
+                    CartItem(
+                        product = product,
+                        quantity = receiptItem.quantity
+                    )
+                }
+                _cartItems.value = newCartItems
+                withContext(Dispatchers.Main) {
+                    // Optional: Verify navigation handles this
+                }
+            }
+        }
     }
     
     // ===== PRODUCT MANAGEMENT =====

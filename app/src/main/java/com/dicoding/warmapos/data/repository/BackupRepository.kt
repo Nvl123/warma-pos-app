@@ -22,6 +22,7 @@ class BackupRepository(private val context: Context) {
         private const val BACKUP_FOLDER = "WARMAPOS_Backup"
         private const val PRODUCTS_FILENAME = "products.csv"
         private const val RECEIPTS_FOLDER = "Struk"
+        private const val GROUPED_RECEIPTS_FOLDER = "GroupedStruk"
     }
 
     /**
@@ -53,6 +54,9 @@ class BackupRepository(private val context: Context) {
                 // Add receipt files from Documents/WARMAPOS/Struk
                 addReceiptsToZip(zos)
                 
+                // Add grouped receipt files from Documents/WARMAPOS/GroupedStruk
+                addGroupedReceiptsToZip(zos)
+                
                 // Add settings/synonyms if exist
                 addSettingsToZip(zos)
             }
@@ -82,6 +86,16 @@ class BackupRepository(private val context: Context) {
         if (receiptsDir.exists() && receiptsDir.isDirectory) {
             addDirectoryToZip(zos, receiptsDir, "$RECEIPTS_FOLDER/")
             Log.d(TAG, "Added receipts folder to backup")
+        }
+    }
+    
+    private fun addGroupedReceiptsToZip(zos: ZipOutputStream) {
+        val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val groupedDir = File(documentsDir, "WARMAPOS/$GROUPED_RECEIPTS_FOLDER")
+        
+        if (groupedDir.exists() && groupedDir.isDirectory) {
+            addDirectoryToZip(zos, groupedDir, "$GROUPED_RECEIPTS_FOLDER/")
+            Log.d(TAG, "Added grouped receipts folder to backup")
         }
     }
 
@@ -136,7 +150,11 @@ class BackupRepository(private val context: Context) {
                             }
                             entry.name.startsWith("$RECEIPTS_FOLDER/") && !entry.isDirectory -> {
                                 // Restore receipt files
-                                restoreReceiptFile(entry.name, zis)
+                                restoreExternalFile(entry.name, zis)
+                            }
+                            entry.name.startsWith("$GROUPED_RECEIPTS_FOLDER/") && !entry.isDirectory -> {
+                                // Restore grouped receipt files
+                                restoreExternalFile(entry.name, zis)
                             }
                             entry.name == "synonyms.json" -> {
                                 context.openFileOutput("synonyms.json", Context.MODE_PRIVATE).use { out ->
@@ -164,7 +182,7 @@ class BackupRepository(private val context: Context) {
         }
     }
 
-    private fun restoreReceiptFile(entryName: String, zis: ZipInputStream) {
+    private fun restoreExternalFile(entryName: String, zis: ZipInputStream) {
         val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
         val targetFile = File(documentsDir, "WARMAPOS/$entryName")
         

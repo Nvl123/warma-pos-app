@@ -121,12 +121,14 @@ class ReceiptRepository(private val context: Context) {
                     if (receipt != null) {
                         receipts.add(
                             ReceiptHistoryItem(
-                                path = file.absolutePath,
+                                filePath = file.absolutePath,
                                 date = dateFolder.name,
                                 time = file.name.removePrefix("struk_").removeSuffix(".json"),
-                                total = receipt.total,
+                                totalAmount = receipt.total,
                                 itemsCount = receipt.items.size,
-                                kasir = receipt.kasir
+                                kasir = receipt.kasir,
+                                timestamp = receipt.timestamp,
+                                orderId = receipt.id
                             )
                         )
 
@@ -194,19 +196,23 @@ class ReceiptRepository(private val context: Context) {
  * Receipt history list item (lightweight summary)
  */
 data class ReceiptHistoryItem(
-    val path: String,
+    val filePath: String,
     val date: String,
     val time: String,
-    val total: Int,
+    val totalAmount: Int,
     val itemsCount: Int,
-    val kasir: String
+    val kasir: String,
+    val timestamp: Long,
+    val orderId: String
 ) {
     fun formattedTotal(): String {
-        return "Rp${String.format("%,d", total).replace(',', '.')}"
+        return "Rp${String.format("%,d", totalAmount).replace(',', '.')}"
     }
 
     fun formattedTime(): String {
-        return if (time.length >= 4) {
+        return if (time.length >= 6) { // HHmmss
+             "${time.substring(0, 2)}:${time.substring(2, 4)}"
+        } else if (time.length >= 4) {
             "${time.substring(0, 2)}:${time.substring(2, 4)}"
         } else {
             time

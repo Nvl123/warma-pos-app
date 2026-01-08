@@ -1,15 +1,12 @@
 package com.dicoding.warmapos.ui.screens
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.DeleteForever
-import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +17,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dicoding.warmapos.data.repository.ReceiptHistoryItem
 import com.dicoding.warmapos.ui.MainViewModel
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,10 +30,24 @@ fun HistoryScreen(
     onNavigateToCart: (() -> Unit)? = null
 ) {
     val receiptHistory by viewModel.receiptHistory.collectAsState()
+    val groupedReceipts by viewModel.groupedReceipts.collectAsState()
+    val isSelectionMode by viewModel.isGroupSelectionMode.collectAsState()
+    val selectedPaths by viewModel.selectedReceiptPaths.collectAsState()
+    val editingGroupTarget by viewModel.editingGroupTarget.collectAsState()
     
+    var selectedTab by remember { mutableStateOf(0) } // 0: Transaksi, 1: Kelompok Struk
     var selectedFilter by remember { mutableStateOf(HistoryFilter.ALL) }
-    var customDate by remember { mutableStateOf<java.time.LocalDate?>(null) }
+    var customDate by remember { mutableStateOf<String?>(null) } // Using String "yyyy-MM-dd" for API 24 compat
     var showDatePicker by remember { mutableStateOf(false) }
+    var showGroupDetail by remember { mutableStateOf<com.dicoding.warmapos.data.model.GroupedReceipt?>(null) }
+    
+    // Group creation dialog
+    var showCreateGroupDialog by remember { mutableStateOf(false) }
+    var newGroupName by remember { mutableStateOf("") }
+    
+    LaunchedEffect(Unit) {
+        viewModel.loadGroupedReceipts()
+    }
     
     // Date picker dialog
     if (showDatePicker) {
@@ -42,9 +57,8 @@ fun HistoryScreen(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        customDate = java.time.Instant.ofEpochMilli(millis)
-                            .atZone(java.time.ZoneId.systemDefault())
-                            .toLocalDate()
+                        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                        customDate = sdf.format(java.util.Date(millis))
                         selectedFilter = HistoryFilter.CUSTOM
                     }
                     showDatePicker = false
@@ -58,170 +72,632 @@ fun HistoryScreen(
         }
     }
     
-    // Filter the history
+    // Create Group Dialog
+    if (showCreateGroupDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateGroupDialog = false },
+            title = { Text("Buat Kelompok Struk") },
+            text = {
+                Column {
+                    Text("Total: ${formatCurrency(receiptHistory.filter { selectedPaths.contains(it.filePath) }.sumOf { it.totalAmount })}")
+                    Text("Jumlah: ${selectedPaths.size} struk")
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newGroupName,
+                        onValueChange = { newGroupName = it },
+                        label = { Text("Nama Kelompok (Opsional)") },
+                        placeholder = { Text("Kelompok ${selectedPaths.size} Struk") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.createGroupedReceipt(newGroupName)
+                    showCreateGroupDialog = false
+                    newGroupName = ""
+                    selectedTab = 1 // Switch to groups tab
+                }) { Text("Simpan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateGroupDialog = false }) { Text("Batal") }
+            }
+        )
+    }
+
+    // Edit Group Dialog
+    if (showGroupDetail != null) {
+        val editingGroup = showGroupDetail!!
+        val groupReceipts = remember(editingGroup) {
+            receiptHistory.filter { editingGroup.receiptPaths.contains(it.filePath) }
+        }
+        
+        AlertDialog(
+            onDismissRequest = { showGroupDetail = null },
+            title = { 
+                Text("Edit Kelompok: ${editingGroup.name}") 
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                ) {
+                    Text(
+                        "Total: ${formatCurrency(editingGroup.totalAmount)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${editingGroup.receiptCount} struk dalam kelompok",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(Modifier.height(12.dp))
+                    
+                    Text(
+                        "Daftar Struk:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(Modifier.height(8.dp))
+                    
+                    // Scrollable list of receipts in group
+                    LazyColumn(
+                        modifier = Modifier.weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(groupReceipts) { receipt ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "${receipt.date} ${receipt.time}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = receipt.formattedTotal(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.removeReceiptFromGroup(editingGroup, receipt.filePath)
+                                            // Refresh the group
+                                            val updatedGroup = groupedReceipts.find { it.id == editingGroup.id }
+                                            if (updatedGroup == null || updatedGroup.receiptCount == 0) {
+                                                showGroupDetail = null
+                                            } else {
+                                                showGroupDetail = updatedGroup
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.DeleteForever,
+                                            contentDescription = "Hapus dari kelompok",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(12.dp))
+                    
+                    // Add more receipts button
+                    OutlinedButton(
+                        onClick = {
+                            showGroupDetail = null
+                            selectedTab = 0 // Switch to transactions
+                            viewModel.startAddingToGroup(editingGroup)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Tambah Struk ke Kelompok")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { showGroupDetail = null }) {
+                    Text("Tutup")
+                }
+            },
+            dismissButton = {}
+        )
+    }
+
+    // Filter logic
+    // Date filtering using Calendar for API 24 compatibility
     val filteredHistory = remember(receiptHistory, selectedFilter, customDate) {
-        val today = java.time.LocalDate.now()
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val todayString = sdf.format(java.util.Date())
+        val todayCal = java.util.Calendar.getInstance()
+        
         receiptHistory.filter { item ->
             when (selectedFilter) {
                 HistoryFilter.ALL -> true
-                HistoryFilter.TODAY -> item.date == today.toString()
+                HistoryFilter.TODAY -> item.date == todayString
                 HistoryFilter.THIS_WEEK -> {
                     try {
-                        val itemDate = java.time.LocalDate.parse(item.date)
-                        val weekStart = today.minusDays(today.dayOfWeek.value.toLong() - 1)
-                        itemDate >= weekStart
+                        val itemCal = java.util.Calendar.getInstance()
+                        itemCal.time = sdf.parse(item.date) ?: return@filter true
+                        val weekStart = java.util.Calendar.getInstance()
+                        weekStart.set(java.util.Calendar.DAY_OF_WEEK, weekStart.firstDayOfWeek)
+                        itemCal >= weekStart
                     } catch (e: Exception) { true }
                 }
                 HistoryFilter.THIS_MONTH -> {
                     try {
-                        val itemDate = java.time.LocalDate.parse(item.date)
-                        itemDate.year == today.year && itemDate.monthValue == today.monthValue
+                        val itemCal = java.util.Calendar.getInstance()
+                        itemCal.time = sdf.parse(item.date) ?: return@filter true
+                        itemCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
+                            itemCal.get(java.util.Calendar.MONTH) == todayCal.get(java.util.Calendar.MONTH)
                     } catch (e: Exception) { true }
                 }
                 HistoryFilter.CUSTOM -> {
-                    customDate?.let { item.date == it.toString() } ?: true
+                    customDate?.let { item.date == it } ?: true
                 }
             }
         }
     }
 
-    // Single scrollable LazyColumn - header and filters scroll with content
-    LazyColumn(
-        modifier = modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // Header card - scrolls with content
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Outlined.Receipt, null,
-                        modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+    Scaffold(
+        contentWindowInsets = WindowInsets(0.dp),
+        floatingActionButton = {
+            if (isSelectionMode && selectedPaths.isNotEmpty()) {
+                if (editingGroupTarget != null) {
+                    // Adding to existing group
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.addReceiptsToExistingGroup() },
+                        icon = { Icon(Icons.Default.Add, null) },
+                        text = { Text("Tambah ke ${editingGroupTarget!!.name}") },
+                        containerColor = MaterialTheme.colorScheme.tertiary
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            "📜 Riwayat Struk",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                        Text(
-                            "${receiptHistory.size} struk tersimpan",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                } else {
+                    // Creating new group
+                    ExtendedFloatingActionButton(
+                        onClick = { showCreateGroupDialog = true },
+                        icon = { Icon(Icons.Default.Save, null) },
+                        text = { Text("Buat Kelompok (${selectedPaths.size})") },
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else if (isSelectionMode && editingGroupTarget != null) {
+                // Cancle button when in add-to-group mode with no selection
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.cancelAddingToGroup() },
+                    icon = { Icon(Icons.Default.Close, null) },
+                    text = { Text("Batal") },
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            } else if (!isSelectionMode && selectedTab == 0) {
+                 FloatingActionButton(
+                    onClick = { viewModel.toggleGroupSelectionMode() },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Icon(Icons.Default.Checklist, "Mode Pilih")
+                }
+            }
+        }
+    ) { paddingValues ->
+        // Single scrollable list for everything
+        LazyColumn(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp, start = 16.dp, end = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Riwayat Penjualan",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Text(
+                                text = "Kelola riwayat transaksi dan struk",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
                         )
                     }
                 }
             }
-        }
-        
-        // Filter chips - scrolls with content
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                HistoryFilter.entries.forEach { filter ->
-                    FilterChip(
-                        selected = selectedFilter == filter,
+            
+            // Tabs
+            item {
+                TabRow(
+                    selectedTabIndex = selectedTab,
+                    containerColor = Color.Transparent,
+                    divider = {}
+                ) {
+                    Tab(
+                        selected = selectedTab == 0,
                         onClick = { 
-                            if (filter == HistoryFilter.CUSTOM) {
-                                showDatePicker = true
-                            } else {
-                                selectedFilter = filter
-                            }
+                            selectedTab = 0 
+                            if (isSelectionMode) viewModel.toggleGroupSelectionMode()
                         },
-                        label = { 
-                            val monthNames = arrayOf("Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des")
-                            Text(
-                                if (filter == HistoryFilter.CUSTOM && customDate != null && selectedFilter == HistoryFilter.CUSTOM) {
-                                    "${customDate!!.dayOfMonth} ${monthNames[customDate!!.monthValue - 1]}"
-                                } else {
-                                    filter.label
-                                },
-                                style = MaterialTheme.typography.labelMedium
-                            ) 
+                        text = { Text("Transaksi") }
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { 
+                            selectedTab = 1
+                            if (isSelectionMode) viewModel.toggleGroupSelectionMode() 
                         },
-                        leadingIcon = if (selectedFilter == filter) {
-                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
-                        } else if (filter == HistoryFilter.CUSTOM) {
-                            { Icon(Icons.Default.DateRange, null, modifier = Modifier.size(16.dp)) }
-                        } else null,
-                        shape = RoundedCornerShape(8.dp)
+                        text = { Text("Kelompok Struk") }
                     )
                 }
             }
-        }
-        
-        // Counter
-        item {
-            Text(
-                "${filteredHistory.size} struk",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Empty state or items
-        if (filteredHistory.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(0.9f),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        shape = RoundedCornerShape(24.dp)
+            
+            if (selectedTab == 0) {
+                // Filters (Only for Transactions)
+                item {
+                    ScrollableTabRow(
+                        selectedTabIndex = selectedFilter.ordinal,
+                        edgePadding = 0.dp,
+                        containerColor = Color.Transparent,
+                        divider = {},
+                        indicator = {},
+                        modifier = Modifier.padding(vertical = 4.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.History, null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        HistoryFilter.values().forEach { filter ->
+                            FilterChip(
+                                selected = selectedFilter == filter,
+                                onClick = { selectedFilter = filter },
+                                label = { 
+                                    Text(
+                                        if (filter == HistoryFilter.CUSTOM && customDate != null) 
+                                            customDate.toString() 
+                                        else filter.label
+                                    ) 
+                                },
+                                leadingIcon = if (filter == HistoryFilter.CUSTOM) {
+                                    { Icon(Icons.Default.DateRange, null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                modifier = Modifier.padding(end = 8.dp),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             )
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                if (receiptHistory.isEmpty()) "Belum Ada Riwayat" else "Tidak Ada Hasil",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                if (receiptHistory.isEmpty()) 
-                                    "Simpan struk dari keranjang untuk melihatnya di sini" 
-                                    else "Tidak ada struk untuk filter ${selectedFilter.label}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                textAlign = TextAlign.Center
-                            )
+                        }
+                        // Edit Date Button for Custom Filter
+                        if (selectedFilter == HistoryFilter.CUSTOM) {
+                            IconButton(onClick = { showDatePicker = true }) {
+                                Icon(Icons.Default.EditCalendar, "Ubah Tanggal")
+                            }
                         }
                     }
                 }
+
+                if (isSelectionMode) {
+                    item {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Checklist, null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Pilih struk untuk dikelompokkan",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.weight(1f))
+                                IconButton(onClick = { viewModel.toggleGroupSelectionMode() }) {
+                                    Icon(Icons.Default.Close, "Batal")
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                items(filteredHistory.reversed()) { item ->
+                    val isSelected = selectedPaths.contains(item.filePath)
+                    
+                    HistoryItemCard(
+                        item = item,
+                        isSelectionMode = isSelectionMode,
+                        isSelected = isSelected,
+                        onToggleSelection = { viewModel.toggleReceiptSelection(item.filePath) },
+                        onItemClick = { if (!isSelectionMode) { /* Open detail */ } },
+                        onDelete = { viewModel.deleteReceipt(item) },
+                        onPrint = { viewModel.reprintReceipt(item) },
+                        onReuse = {
+                            viewModel.reuseReceipt(item)
+                            onNavigateToCart?.invoke()
+                        }
+                    )
+                }
+            } else {
+                // Grouped Receipts List
+                if (groupedReceipts.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                "Belum ada kelompok struk.\nBuat dari tab Transaksi dengan mode pilih.",
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    items(groupedReceipts) { group ->
+                        GroupHistoryItemCard(
+                            group = group,
+                            onItemClick = { /* Show details */ },
+                            onDelete = { viewModel.deleteGroupedReceipt(group) },
+                            onPrint = { viewModel.printGroupedReceipt(group) },
+                            onEdit = { showGroupDetail = group }
+                        )
+                    }
+                }
             }
-        } else {
-            items(filteredHistory) { item ->
-                HistoryItemCard(
-                    item = item,
-                    onLoad = { 
-                        viewModel.loadReceiptToCart(item.path)
-                        onNavigateToCart?.invoke()
-                    },
-                    onDelete = { viewModel.deleteReceipt(item.path) }
+        }
+    }
+}
+
+@Composable
+fun GroupHistoryItemCard(
+    group: com.dicoding.warmapos.data.model.GroupedReceipt,
+    onItemClick: () -> Unit,
+    onDelete: () -> Unit,
+    onPrint: () -> Unit,
+    onEdit: () -> Unit
+) {
+    var showActions by remember { mutableStateOf(false) }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showActions = !showActions },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            // Left Sidebar (Vertical Group Name)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(40.dp)
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${group.receiptCount}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
+            }
+
+            // Main Content
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(12.dp)
+            ) {
+                // Top: Name and Date
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault()).format(java.util.Date(group.timestamp)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Bottom: Total
+                val total = group.totalAmount
+                val fontSize = when {
+                    total >= 100_000_000 -> 20.sp
+                    else -> 22.sp
+                }
+
+                Text(
+                    text = formatCurrency(total),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontSize = fontSize),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
+
+            // Action Buttons (Revealed on click)
+            if (showActions) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    IconButton(onClick = { onEdit(); showActions = false }) {
+                        Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { onPrint(); showActions = false }) {
+                        Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { onDelete(); showActions = false }) {
+                        Icon(Icons.Outlined.DeleteForever, "Delete", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HistoryItemCard(
+    item: ReceiptHistoryItem,
+    isSelectionMode: Boolean,
+    isSelected: Boolean,
+    onToggleSelection: () -> Unit,
+    onItemClick: () -> Unit,
+    onDelete: () -> Unit,
+    onPrint: () -> Unit,
+    onReuse: () -> Unit
+) {
+    var showActions by remember { mutableStateOf(false) }
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { 
+                if (isSelectionMode) onToggleSelection() 
+                else showActions = !showActions // Toggle action buttons
+            },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) 
+            else MaterialTheme.colorScheme.surface
+        ),
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+    ) {
+        Row(
+            modifier = Modifier.height(IntrinsicSize.Min)
+        ) {
+            // Left Sidebar (Vertical Order ID)
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(40.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelectionMode) {
+                    Checkbox(
+                        checked = isSelected,
+                        onCheckedChange = { onToggleSelection() }
+                    )
+                } else {
+                    Text(
+                        text = "#${item.orderId.takeLast(4)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier
+                            .rotate(-90f)
+                            .padding(vertical = 4.dp),
+                        maxLines = 1
+                    )
+                }
+            }
+
+            // Main Content
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(12.dp)
+            ) {
+                // Top: Date/Time
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = item.time,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = item.date,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Bottom: Total
+                val total = item.totalAmount
+                val fontSize = when {
+                    total >= 100_000_000 -> 20.sp
+                    else -> 22.sp
+                }
+
+                Text(
+                    text = item.formattedTotal(),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontSize = fontSize),
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
+
+            // Action Buttons (Revealed on click)
+            if (showActions && !isSelectionMode) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    IconButton(onClick = { onReuse(); showActions = false }) {
+                        Icon(Icons.Default.Edit, "Edit", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { onPrint(); showActions = false }) {
+                        Icon(Icons.Default.Print, "Print", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = { onDelete(); showActions = false }) {
+                        Icon(Icons.Outlined.DeleteForever, "Delete", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
         }
     }
@@ -235,232 +711,6 @@ enum class HistoryFilter(val label: String) {
     CUSTOM("Pilih Tanggal")
 }
 
-@Composable
-fun HistoryItemCard(
-    item: ReceiptHistoryItem,
-    onLoad: () -> Unit,
-    onDelete: () -> Unit
-) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showLoadConfirmDialog by remember { mutableStateOf(false) }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            icon = { 
-                Icon(
-                    Icons.Outlined.DeleteForever,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                ) 
-            },
-            title = { Text("Hapus Struk?", fontWeight = FontWeight.Bold) },
-            text = { Text("Struk ini akan dihapus permanen dan tidak dapat dikembalikan.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onDelete()
-                        showDeleteDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Hapus")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { showDeleteDialog = false },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Batal")
-                }
-            }
-        )
-    }
-
-    if (showLoadConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showLoadConfirmDialog = false },
-            icon = { 
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                ) 
-            },
-            title = { Text("Muat ke Keranjang?", fontWeight = FontWeight.Bold) },
-            text = { Text("Struk ini akan dimuat ke keranjang untuk diedit atau dicetak ulang. Keranjang saat ini akan diganti.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        onLoad()
-                        showLoadConfirmDialog = false
-                    },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Muat")
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { showLoadConfirmDialog = false },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Batal")
-                }
-            }
-        )
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            // Date & Time row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.CalendarToday,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = formatDateIndonesian(item.date),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(4.dp)
-                    ) {
-                        Text(
-                            text = item.formattedTime(),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // Adaptive font size for large values
-                val totalFontSize = when {
-                    item.total >= 100_000_000 -> 12.sp
-                    item.total >= 10_000_000 -> 14.sp
-                    item.total >= 1_000_000 -> 16.sp
-                    else -> 22.sp  // default titleLarge
-                }
-                
-                Text(
-                    text = item.formattedTotal(),
-                    fontSize = totalFontSize,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Info row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = item.kasir,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.ShoppingBag,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${item.itemsCount} item",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Load/Edit button (prominent)
-                Button(
-                    onClick = { showLoadConfirmDialog = true },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit / Muat")
-                }
-
-                // Delete button
-                OutlinedButton(
-                    onClick = { showDeleteDialog = true },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Hapus")
-                }
-            }
-        }
-    }
-}
-
-/**
- * Format date from yyyy-MM-dd to Indonesian format (e.g., "4 Januari 2026")
- */
-private fun formatDateIndonesian(dateStr: String): String {
-    return try {
-        val date = java.time.LocalDate.parse(dateStr)
-        val monthNames = arrayOf(
-            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-            "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-        )
-        "${date.dayOfMonth} ${monthNames[date.monthValue - 1]} ${date.year}"
-    } catch (e: Exception) {
-        dateStr
-    }
+fun formatCurrency(amount: Int): String {
+    return java.text.NumberFormat.getCurrencyInstance(java.util.Locale("id", "ID")).format(amount)
 }
