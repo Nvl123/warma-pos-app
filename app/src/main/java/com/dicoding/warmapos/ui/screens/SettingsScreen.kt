@@ -52,12 +52,15 @@ fun SettingsScreen(
     var showPrinterSection by remember { mutableStateOf(false) }
     var showThemeSection by remember { mutableStateOf(false) }
     var showDesignSection by remember { mutableStateOf(false) }
+    var showKeteranganSection by remember { mutableStateOf(false) }
     var showImportSection by remember { mutableStateOf(false) }
     var showSynonymSection by remember { mutableStateOf(false) }
     var showDeveloperSection by remember { mutableStateOf(false) }
     var showProductSection by remember { mutableStateOf(false) }
     var showBackupSection by remember { mutableStateOf(false) }
     var showApiSection by remember { mutableStateOf(false) }
+
+    val keteranganOptions by viewModel.keteranganOptions.collectAsState()
 
     // Bluetooth permission
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -179,6 +182,23 @@ fun SettingsScreen(
                 ReceiptDesignSettings(
                     design = receiptDesign,
                     onUpdate = { viewModel.updateReceiptDesign(it) }
+                )
+            }
+        }
+
+        // Keterangan Options Section
+        item {
+            ModernSettingsSection(
+                icon = Icons.Default.Description,
+                title = "Opsi Keterangan",
+                subtitle = "${keteranganOptions.size} opsi",
+                expanded = showKeteranganSection,
+                onToggle = { showKeteranganSection = !showKeteranganSection }
+            ) {
+                KeteranganOptionsSettings(
+                    options = keteranganOptions,
+                    onAdd = { viewModel.addKeteranganOption(it) },
+                    onRemove = { viewModel.removeKeteranganOption(it) }
                 )
             }
         }
@@ -677,6 +697,75 @@ fun SynonymSettings(synonyms: Map<String, String>, onAdd: (String, String) -> Un
                         }
                         IconButton(onClick = { onRemove(key) }) {
                             Icon(Icons.Default.Delete, "Hapus", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun KeteranganOptionsSettings(
+    options: List<String>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit
+) {
+    var newOption by remember { mutableStateOf("") }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = newOption,
+                onValueChange = { newOption = it },
+                label = { Text("Opsi Baru") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                shape = RoundedCornerShape(8.dp)
+            )
+            Button(
+                onClick = {
+                    if (newOption.isNotBlank()) {
+                        onAdd(newOption.trim())
+                        newOption = ""
+                    }
+                },
+                modifier = Modifier.height(56.dp),
+                enabled = newOption.isNotBlank(),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Add, null)
+            }
+        }
+
+        Text(
+            "Opsi ini akan muncul di dropdown \"Keterangan\" pada halaman Cart.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (options.isEmpty()) {
+            Text("Belum ada opsi keterangan", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            options.forEach { option ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Label, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(option, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        if (option != "Asli") {
+                            IconButton(onClick = { onRemove(option) }) {
+                                Icon(Icons.Default.Delete, "Hapus", tint = MaterialTheme.colorScheme.error)
+                            }
+                        } else {
+                            // Show lock icon for default option
+                            Icon(Icons.Default.Lock, "Default", tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(24.dp).padding(end = 4.dp))
                         }
                     }
                 }

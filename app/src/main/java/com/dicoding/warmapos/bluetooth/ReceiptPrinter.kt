@@ -26,6 +26,21 @@ class ReceiptPrinter(
         // Initialize
         builder.init()
 
+        // Add 2 blank lines at top for spacing
+        builder.feed(2)
+
+        // Lembar Ke and Keterangan row (left-right aligned)
+        val lembarText = "Lembar ke: ${receipt.lembarKe}"
+        val ketText = if (receipt.keterangan.isNotBlank()) "Ket: ${receipt.keterangan}" else ""
+        if (ketText.isNotBlank()) {
+            builder.alignLeft()
+            builder.printDoubleColumn(lembarText, ketText)
+        } else {
+            builder.alignLeft()
+            builder.printLine(lembarText)
+        }
+        builder.separator()
+
         // Header text (if any)
         if (design.headerText.isNotBlank()) {
             builder.alignCenter()
@@ -122,6 +137,24 @@ class ReceiptPrinter(
             val space = width - left.length - right.length
             return if (space > 0) left + " ".repeat(space) + right
             else left.take(width - right.length - 1) + " " + right
+        }
+
+        // Add 2 blank lines at top for spacing
+        lines.add("")
+        lines.add("")
+
+        // Lembar Ke and Keterangan row (left-right aligned)
+        fun doubleColumnSimple(left: String, right: String): String {
+            val space = width - left.length - right.length
+            return if (space > 0) left + " ".repeat(space) + right
+            else left.take(width - right.length - 1) + " " + right
+        }
+        val lembarText = "Lembar ke: ${receipt.lembarKe}"
+        val ketText = if (receipt.keterangan.isNotBlank()) "Ket: ${receipt.keterangan}" else ""
+        if (ketText.isNotBlank()) {
+            lines.add(doubleColumnSimple(lembarText, ketText))
+        } else {
+            lines.add(lembarText)
         }
 
         // Top border

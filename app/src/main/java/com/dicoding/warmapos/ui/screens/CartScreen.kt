@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.DeleteForever
@@ -17,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +26,7 @@ import com.dicoding.warmapos.ui.MainViewModel
 import com.dicoding.warmapos.ui.components.CartItemCard
 import com.dicoding.warmapos.ui.components.TotalCard
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CartScreen(
     viewModel: MainViewModel,
@@ -32,9 +35,13 @@ fun CartScreen(
     val cartItems by viewModel.cartItems.collectAsState()
     val kasirName by viewModel.kasirName.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val lembarKe by viewModel.lembarKe.collectAsState()
+    val keterangan by viewModel.keterangan.collectAsState()
+    val keteranganOptions by viewModel.keteranganOptions.collectAsState()
 
     var showReceiptPreview by remember { mutableStateOf(false) }
     var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var keteranganExpanded by remember { mutableStateOf(false) }
 
     // Clear confirmation dialog
     if (showClearConfirmDialog) {
@@ -115,6 +122,59 @@ fun CartScreen(
                 )
             }
 
+            // Lembar Ke and Keterangan row
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Lembar Ke input
+                    OutlinedTextField(
+                        value = lembarKe.toString(),
+                        onValueChange = { value ->
+                            value.toIntOrNull()?.let { viewModel.updateLembarKe(it) }
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("📄 Lembar Ke") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+
+                    // Keterangan dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = keteranganExpanded,
+                        onExpandedChange = { keteranganExpanded = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = keterangan,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("📝 Keterangan") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = keteranganExpanded) },
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = keteranganExpanded,
+                            onDismissRequest = { keteranganExpanded = false }
+                        ) {
+                            keteranganOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        viewModel.updateKeterangan(option)
+                                        keteranganExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Cart items
             items(cartItems, key = { it.id }) { item ->
                 CartItemCard(
@@ -166,7 +226,7 @@ fun CartScreen(
                 Button(
                     onClick = { viewModel.printReceipt() },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
-                    enabled = viewModel.printerManager.isConnected && !isLoading,
+                    enabled = viewModel.printerManager.savedPrinterAddress != null && !isLoading,
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,

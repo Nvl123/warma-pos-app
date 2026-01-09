@@ -11,7 +11,9 @@ data class Receipt(
     val kasir: String = "Kasir",
     val storeName: String = "WARMA STORE",
     val items: List<ReceiptItem>,
-    val total: Int
+    val total: Int,
+    val lembarKe: Int = 1,
+    val keterangan: String = ""
 ) {
     fun formattedTotal(): String {
         return "Rp${String.format("%,d", total).replace(',', '.')}"

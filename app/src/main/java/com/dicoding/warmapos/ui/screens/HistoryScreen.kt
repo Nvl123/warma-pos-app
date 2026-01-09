@@ -40,6 +40,7 @@ fun HistoryScreen(
     var customDate by remember { mutableStateOf<String?>(null) } // Using String "yyyy-MM-dd" for API 24 compat
     var showDatePicker by remember { mutableStateOf(false) }
     var showGroupDetail by remember { mutableStateOf<com.dicoding.warmapos.data.model.GroupedReceipt?>(null) }
+    var sortAscending by remember { mutableStateOf(false) } // false = newest first (desc)
     
     // Group creation dialog
     var showCreateGroupDialog by remember { mutableStateOf(false) }
@@ -222,14 +223,14 @@ fun HistoryScreen(
         )
     }
 
-    // Filter logic
+    // Filter logic for receipts
     // Date filtering using Calendar for API 24 compatibility
-    val filteredHistory = remember(receiptHistory, selectedFilter, customDate) {
+    val filteredHistory = remember(receiptHistory, selectedFilter, customDate, sortAscending) {
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
         val todayString = sdf.format(java.util.Date())
         val todayCal = java.util.Calendar.getInstance()
         
-        receiptHistory.filter { item ->
+        val filtered = receiptHistory.filter { item ->
             when (selectedFilter) {
                 HistoryFilter.ALL -> true
                 HistoryFilter.TODAY -> item.date == todayString
@@ -255,6 +256,44 @@ fun HistoryScreen(
                 }
             }
         }
+        if (sortAscending) filtered else filtered.reversed()
+    }
+
+    // Filter logic for grouped receipts (same filtering)
+    val filteredGroupedReceipts = remember(groupedReceipts, selectedFilter, customDate, sortAscending) {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+        val todayString = sdf.format(java.util.Date())
+        val todayCal = java.util.Calendar.getInstance()
+        
+        val filtered = groupedReceipts.filter { group ->
+            val groupDateString = sdf.format(java.util.Date(group.timestamp))
+            when (selectedFilter) {
+                HistoryFilter.ALL -> true
+                HistoryFilter.TODAY -> groupDateString == todayString
+                HistoryFilter.THIS_WEEK -> {
+                    try {
+                        val itemCal = java.util.Calendar.getInstance()
+                        itemCal.time = java.util.Date(group.timestamp)
+                        val weekStart = java.util.Calendar.getInstance()
+                        weekStart.set(java.util.Calendar.DAY_OF_WEEK, weekStart.firstDayOfWeek)
+                        itemCal >= weekStart
+                    } catch (e: Exception) { true }
+                }
+                HistoryFilter.THIS_MONTH -> {
+                    try {
+                        val itemCal = java.util.Calendar.getInstance()
+                        itemCal.time = java.util.Date(group.timestamp)
+                        itemCal.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
+                            itemCal.get(java.util.Calendar.MONTH) == todayCal.get(java.util.Calendar.MONTH)
+                    } catch (e: Exception) { true }
+                }
+                HistoryFilter.CUSTOM -> {
+                    customDate?.let { groupDateString == it } ?: true
+                }
+            }
+        }
+        val sorted = if (sortAscending) filtered.sortedBy { it.timestamp } else filtered.sortedByDescending { it.timestamp }
+        sorted
     }
 
     Scaffold(
@@ -365,46 +404,69 @@ fun HistoryScreen(
                 }
             }
             
-            if (selectedTab == 0) {
-                // Filters (Only for Transactions)
-                item {
+            // Filters (for both tabs)
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Sort toggle button
+                    IconButton(
+                        onClick = { sortAscending = !sortAscending }
+                    ) {
+                        Icon(
+                            imageVector = if (sortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                            contentDescription = if (sortAscending) "Terlama" else "Terbaru",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Text(
+                        text = if (sortAscending) "Terlama" else "Terbaru",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    // Filter chips
                     ScrollableTabRow(
                         selectedTabIndex = selectedFilter.ordinal,
                         edgePadding = 0.dp,
                         containerColor = Color.Transparent,
                         divider = {},
                         indicator = {},
-                        modifier = Modifier.padding(vertical = 4.dp)
+                        modifier = Modifier.weight(1f)
                     ) {
                         HistoryFilter.values().forEach { filter ->
                             FilterChip(
                                 selected = selectedFilter == filter,
-                                onClick = { selectedFilter = filter },
+                                onClick = { 
+                                    if (filter == HistoryFilter.CUSTOM) showDatePicker = true
+                                    selectedFilter = filter 
+                                },
                                 label = { 
                                     Text(
                                         if (filter == HistoryFilter.CUSTOM && customDate != null) 
                                             customDate.toString() 
-                                        else filter.label
+                                        else filter.label,
+                                        fontSize = 12.sp
                                     ) 
                                 },
                                 leadingIcon = if (filter == HistoryFilter.CUSTOM) {
-                                    { Icon(Icons.Default.DateRange, null, modifier = Modifier.size(16.dp)) }
+                                    { Icon(Icons.Default.DateRange, null, modifier = Modifier.size(14.dp)) }
                                 } else null,
-                                modifier = Modifier.padding(end = 8.dp),
+                                modifier = Modifier.padding(end = 4.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                     selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             )
                         }
-                        // Edit Date Button for Custom Filter
-                        if (selectedFilter == HistoryFilter.CUSTOM) {
-                            IconButton(onClick = { showDatePicker = true }) {
-                                Icon(Icons.Default.EditCalendar, "Ubah Tanggal")
-                            }
-                        }
                     }
                 }
+            }
+
+            if (selectedTab == 0) {
 
                 if (isSelectionMode) {
                     item {
@@ -432,7 +494,7 @@ fun HistoryScreen(
                     }
                 }
                 
-                items(filteredHistory.reversed()) { item ->
+                items(filteredHistory) { item ->
                     val isSelected = selectedPaths.contains(item.filePath)
                     
                     HistoryItemCard(
@@ -462,7 +524,7 @@ fun HistoryScreen(
                         }
                     }
                 } else {
-                    items(groupedReceipts) { group ->
+                    items(filteredGroupedReceipts) { group ->
                         GroupHistoryItemCard(
                             group = group,
                             onItemClick = { /* Show details */ },

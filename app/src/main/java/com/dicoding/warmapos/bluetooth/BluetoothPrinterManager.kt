@@ -176,27 +176,48 @@ class BluetoothPrinterManager(private val context: Context) {
 
     /**
      * Send raw bytes to the printer (auto-connects if needed)
+     * Includes retry logic for stale connections
      */
     suspend fun sendRaw(data: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
-        // Auto-connect to saved printer if not connected
-        val connectResult = ensureConnected()
-        if (connectResult.isFailure) {
-            return@withContext connectResult
+        // Try to connect and send, with one retry on failure
+        suspend fun tryPrint(): Result<Unit> {
+            // Auto-connect to saved printer if not connected
+            val connectResult = ensureConnected()
+            if (connectResult.isFailure) {
+                return connectResult
+            }
+            
+            try {
+                if (outputStream == null) {
+                    return Result.failure(Exception("Not connected to printer"))
+                }
+                outputStream?.write(data)
+                outputStream?.flush()
+                return Result.success(Unit)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                // Connection lost
+                disconnect()
+                return Result.failure(e)
+            }
         }
         
-        try {
-            if (outputStream == null) {
-                return@withContext Result.failure(Exception("Not connected to printer"))
-            }
-            outputStream?.write(data)
-            outputStream?.flush()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // Connection lost, disconnect and try once more
-            disconnect()
-            Result.failure(e)
+        // First attempt
+        val firstResult = tryPrint()
+        if (firstResult.isSuccess) {
+            return@withContext firstResult
         }
+        
+        // Retry once - connection might have been stale
+        val retryResult = tryPrint()
+        if (retryResult.isSuccess) {
+            return@withContext retryResult
+        }
+        
+        // Both failed
+        return@withContext Result.failure(
+            Exception("Gagal mencetak setelah 2 percobaan. Coba hubungkan ulang printer di Pengaturan.")
+        )
     }
 
     /**

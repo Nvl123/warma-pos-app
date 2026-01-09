@@ -253,48 +253,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     return@launch
                 }
                 
-                // Format and print grouped receipt
                 val design = _receiptDesign.value
                 val sdf = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
-                val currencyFormat = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("id", "ID"))
+                val width = design.paperWidth
                 
-                val sb = StringBuilder()
-                sb.appendLine(design.storeName.ifEmpty { "POS WARMA" })
-                if (design.headerText.isNotEmpty()) sb.appendLine(design.headerText)
-                sb.appendLine("================================")
-                sb.appendLine("KELOMPOK STRUK: ${group.name}")
-                sb.appendLine("Tanggal: ${sdf.format(java.util.Date(group.timestamp))}")
-                sb.appendLine("================================")
-                sb.appendLine()
-                
-                // List each receipt
-                receipts.forEachIndexed { index, receipt ->
-                    val receiptTime = sdf.format(java.util.Date(receipt.timestamp))
-                    sb.appendLine("Struk #${index + 1}")
-                    sb.appendLine("  Waktu: $receiptTime")
-                    sb.appendLine("  Items: ${receipt.items.sumOf { it.quantity }}")
-                    sb.appendLine("  Total: ${currencyFormat.format(receipt.total)}")
-                    sb.appendLine("--------------------------------")
+                // Helper function for aligned columns with colon
+                fun alignedRow(label: String, value: String): String {
+                    val labelWithColon = "$label:"
+                    val space = width - labelWithColon.length - value.length
+                    return if (space > 0) labelWithColon + " ".repeat(space) + value
+                    else labelWithColon + value.take(width - labelWithColon.length)
                 }
                 
-                sb.appendLine()
-                sb.appendLine("================================")
-                sb.appendLine("TOTAL: ${receipts.size} STRUK")
-                sb.appendLine("GRAND TOTAL: ${currencyFormat.format(group.totalAmount)}")
-                sb.appendLine("================================")
-                sb.appendLine()
-                if (design.footerText.isNotEmpty()) sb.appendLine(design.footerText)
-                sb.appendLine()
-                sb.appendLine()
+                fun formatCurrency(amount: Int): String {
+                    return "Rp${String.format("%,d", amount).replace(',', '.')}"
+                }
                 
-                // Use EscPosBuilder for printing
+                // Use EscPosBuilder for proper formatting
                 val builder = com.dicoding.warmapos.bluetooth.EscPosBuilder()
+                builder.paperWidth = width
                 builder.init()
-                builder.alignCenter()
                 
-                // Print each line
-                sb.toString().lines().forEach { line ->
-                    builder.printLine(line)
+                // Header with large store name
+                builder.alignCenter()
+                builder.bold(true)
+                builder.doubleSize(true)
+                builder.printLine(design.storeName.ifEmpty { "POS WARMA" })
+                builder.doubleSize(false)
+                builder.bold(false)
+                
+                if (design.headerText.isNotEmpty()) {
+                    builder.printLine(design.headerText)
+                }
+                
+                builder.doubleSeparator()
+                
+                // Group info - left aligned with colon alignment
+                builder.alignLeft()
+                builder.printLine("KELOMPOK STRUK")
+                builder.printLine(alignedRow("Nama", group.name))
+                builder.printLine(alignedRow("Tanggal", sdf.format(java.util.Date(group.timestamp))))
+                builder.printLine(alignedRow("Jumlah", "${receipts.size} struk"))
+                
+                builder.doubleSeparator()
+                
+                // List each receipt with lembar and keterangan
+                receipts.forEachIndexed { index, receipt ->
+                    builder.printLine("--- Struk #${index + 1} ---")
+                    builder.printLine(alignedRow("Waktu", sdf.format(java.util.Date(receipt.timestamp))))
+                    builder.printLine(alignedRow("Lembar", receipt.lembarKe.toString()))
+                    if (receipt.keterangan.isNotBlank()) {
+                        builder.printLine(alignedRow("Ket", receipt.keterangan))
+                    }
+                    builder.printLine(alignedRow("Items", "${receipt.items.sumOf { it.quantity }} pcs"))
+                    builder.printLine(alignedRow("Total", formatCurrency(receipt.total)))
+                    builder.printLine("")
+                }
+                
+                builder.doubleSeparator()
+                
+                // Grand total section
+                builder.bold(true)
+                builder.printLine(alignedRow("TOTAL STRUK", "${receipts.size}"))
+                builder.printLine(alignedRow("GRAND TOTAL", formatCurrency(group.totalAmount)))
+                builder.bold(false)
+                
+                builder.separator()
+                
+                // Footer
+                builder.alignCenter()
+                if (design.footerText.isNotEmpty()) {
+                    builder.printLine(design.footerText)
                 }
                 
                 builder.feed(3)
@@ -320,6 +349,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _kasirName = MutableStateFlow("Kasir")
     val kasirName: StateFlow<String> = _kasirName.asStateFlow()
+
+    // Lembar Ke and Keterangan for receipt
+    private val _lembarKe = MutableStateFlow(1)
+    val lembarKe: StateFlow<Int> = _lembarKe.asStateFlow()
+
+    private val _keterangan = MutableStateFlow("Asli")
+    val keterangan: StateFlow<String> = _keterangan.asStateFlow()
+
+    private val _keteranganOptions = MutableStateFlow<List<String>>(emptyList())
+    val keteranganOptions: StateFlow<List<String>> = _keteranganOptions.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -418,6 +457,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _receiptDesign.value = design
                 _kasirName.value = kasir
             }
+
+            // Load keterangan options
+            val ketOptions = settingsRepository.getKeteranganOptions()
+            withContext(Dispatchers.Main) {
+                _keteranganOptions.value = ketOptions
+                // Set default keterangan if available
+                if (ketOptions.isNotEmpty() && _keterangan.value.isBlank()) {
+                    _keterangan.value = ketOptions.first()
+                }
+            }
             
             // Load history in background
             refreshReceiptHistory()
@@ -490,6 +539,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearCart() {
         _cartItems.value = emptyList()
         editingReceiptPath = null
+        // Reset lembar ke and keterangan for new transaction
+        _lembarKe.value = 1
+        _keterangan.value = _keteranganOptions.value.firstOrNull() ?: "Asli"
+    }
+
+    // Update lembar ke
+    fun updateLembarKe(value: Int) {
+        if (value >= 1) {
+            _lembarKe.value = value
+        }
+    }
+
+    // Update keterangan
+    fun updateKeterangan(value: String) {
+        _keterangan.value = value
+    }
+
+    // Keterangan options management
+    fun addKeteranganOption(option: String) {
+        settingsRepository.addKeteranganOption(option)
+        _keteranganOptions.value = settingsRepository.getKeteranganOptions()
+    }
+
+    fun removeKeteranganOption(option: String) {
+        // Prevent removing 'Asli' as it's the default option
+        if (option == "Asli") return
+        
+        settingsRepository.removeKeteranganOption(option)
+        _keteranganOptions.value = settingsRepository.getKeteranganOptions()
+        // If removed option was selected, reset to first available
+        if (_keterangan.value == option) {
+            _keterangan.value = _keteranganOptions.value.firstOrNull() ?: "Asli"
+        }
     }
 
     // ===== OCR =====
@@ -564,7 +646,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             kasir = _kasirName.value,
             storeName = _receiptDesign.value.storeName,
             items = items.map { ReceiptItem.fromCartItem(it) },
-            total = cartTotal
+            total = cartTotal,
+            lembarKe = _lembarKe.value,
+            keterangan = _keterangan.value
         )
 
         return if (editingReceiptPath != null) {
@@ -598,6 +682,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _cartItems.value = cartItems
         editingReceiptPath = path
         _kasirName.value = receipt.kasir
+        _lembarKe.value = receipt.lembarKe
+        _keterangan.value = receipt.keterangan
         _successMessage.value = "Struk dimuat"
     }
 
@@ -625,7 +711,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             kasir = _kasirName.value,
             storeName = _receiptDesign.value.storeName,
             items = items.map { ReceiptItem.fromCartItem(it) },
-            total = cartTotal
+            total = cartTotal,
+            lembarKe = _lembarKe.value,
+            keterangan = _keterangan.value
         )
 
         return receiptPrinter.generatePreview(receipt, _receiptDesign.value)
@@ -702,7 +790,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 kasir = _kasirName.value,
                 storeName = _receiptDesign.value.storeName,
                 items = items.map { ReceiptItem.fromCartItem(it) },
-                total = cartTotal
+                total = cartTotal,
+                lembarKe = _lembarKe.value,
+                keterangan = _keterangan.value
             )
 
             val result = receiptPrinter.printReceipt(receipt, _receiptDesign.value)
@@ -781,9 +871,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reprintReceipt(item: ReceiptHistoryItem) {
         viewModelScope.launch(Dispatchers.IO) {
-            val receipt = receiptRepository.loadReceipt(item.filePath)
-            if (receipt != null) {
-                receiptPrinter.printReceipt(receipt, _receiptDesign.value)
+            try {
+                _isLoading.value = true
+                val receipt = receiptRepository.loadReceipt(item.filePath)
+                if (receipt != null) {
+                    val result = receiptPrinter.printReceipt(receipt, _receiptDesign.value)
+                    withContext(Dispatchers.Main) {
+                        result.fold(
+                            onSuccess = { _successMessage.value = "Struk berhasil dicetak ulang" },
+                            onFailure = { e -> _errorMessage.value = "Gagal cetak: ${e.message}" }
+                        )
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        _errorMessage.value = "Struk tidak ditemukan"
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error reprinting receipt", e)
+                withContext(Dispatchers.Main) {
+                    _errorMessage.value = "Gagal cetak: ${e.message}"
+                }
+            } finally {
+                _isLoading.value = false
             }
         }
     }
