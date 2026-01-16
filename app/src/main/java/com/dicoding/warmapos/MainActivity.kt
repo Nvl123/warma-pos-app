@@ -232,10 +232,32 @@ fun MainScreen(viewModel: MainViewModel) {
                 }
             ) {
                 composable(Screen.Ocr.route) {
-                    OcrScreen(viewModel = viewModel)
+                    OcrScreen(
+                        viewModel = viewModel,
+                        onNavigateToCart = {
+                            navController.navigate(Screen.Cart.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
                 }
                 composable(Screen.Search.route) {
-                    SearchScreen(viewModel = viewModel)
+                    SearchScreen(
+                        viewModel = viewModel,
+                        onNavigateToCart = {
+                            navController.navigate(Screen.Cart.route) {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
                 }
                 composable(Screen.Cart.route) {
                     CartScreen(viewModel = viewModel)

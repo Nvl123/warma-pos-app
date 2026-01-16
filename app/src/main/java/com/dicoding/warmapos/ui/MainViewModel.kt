@@ -290,25 +290,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // Group info - left aligned with colon alignment
                 builder.alignLeft()
+                builder.bold(true)
                 builder.printLine("KELOMPOK STRUK")
+                builder.bold(false)
                 builder.printLine(alignedRow("Nama", group.name))
                 builder.printLine(alignedRow("Tanggal", sdf.format(java.util.Date(group.timestamp))))
                 builder.printLine(alignedRow("Jumlah", "${receipts.size} struk"))
                 
                 builder.doubleSeparator()
                 
+                // Set line spacing for better readability
+                builder.setLineSpacing(32)
+                
                 // List each receipt with lembar and keterangan
                 receipts.forEachIndexed { index, receipt ->
+                    builder.bold(true)
                     builder.printLine("--- Struk #${index + 1} ---")
+                    builder.bold(false)
                     builder.printLine(alignedRow("Waktu", sdf.format(java.util.Date(receipt.timestamp))))
                     builder.printLine(alignedRow("Lembar", receipt.lembarKe.toString()))
                     if (receipt.keterangan.isNotBlank()) {
                         builder.printLine(alignedRow("Ket", receipt.keterangan))
                     }
                     builder.printLine(alignedRow("Items", "${receipt.items.sumOf { it.quantity }} pcs"))
+                    builder.bold(true)
                     builder.printLine(alignedRow("Total", formatCurrency(receipt.total)))
+                    builder.bold(false)
                     builder.printLine("")
                 }
+                
+                // Reset line spacing
+                builder.resetLineSpacing()
                 
                 builder.doubleSeparator()
                 
@@ -655,12 +667,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (receiptRepository.updateReceipt(receipt, editingReceiptPath!!)) {
                 refreshReceiptHistory()
                 _successMessage.value = "Struk diperbarui"
+                clearCart()  // Clear cart after update
                 editingReceiptPath
             } else null
         } else {
             val path = receiptRepository.saveReceipt(receipt)
             refreshReceiptHistory()
             _successMessage.value = "Struk tersimpan"
+            clearCart()  // Clear cart after save
             path
         }
     }

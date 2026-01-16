@@ -42,6 +42,20 @@ class BluetoothPrinterManager(private val context: Context) {
         @SuppressLint("MissingPermission")
         get() = if (hasBluetoothPermission()) connectedDevice?.name else null
     
+    // Track last successful activity to detect stale connections
+    private var lastActivityTime: Long = 0
+    private val CONNECTION_TIMEOUT_MS = 5 * 60 * 1000L  // 5 minutes
+    
+    private fun isConnectionStale(): Boolean {
+        if (!isConnected) return true
+        if (lastActivityTime == 0L) return true
+        return System.currentTimeMillis() - lastActivityTime > CONNECTION_TIMEOUT_MS
+    }
+    
+    private fun updateActivity() {
+        lastActivityTime = System.currentTimeMillis()
+    }
+    
     // ===== SAVED PRINTER =====
     
     val savedPrinterAddress: String?
@@ -66,11 +80,18 @@ class BluetoothPrinterManager(private val context: Context) {
     
     /**
      * Ensure connected to saved printer, auto-connect if not
+     * Also reconnects if connection is stale (idle > 5 minutes)
      * Call this before printing
      */
     @SuppressLint("MissingPermission")
     suspend fun ensureConnected(): Result<Unit> = withContext(Dispatchers.IO) {
-        // Already connected
+        // Check if connection is stale and needs refresh
+        if (isConnected && isConnectionStale()) {
+            android.util.Log.d("BluetoothPrinter", "Connection stale, reconnecting...")
+            disconnect()
+        }
+        
+        // Already connected and not stale
         if (isConnected) {
             return@withContext Result.success(Unit)
         }
@@ -82,7 +103,11 @@ class BluetoothPrinterManager(private val context: Context) {
         }
         
         // Auto-connect to saved printer
-        connect(address)
+        val result = connect(address)
+        if (result.isSuccess) {
+            updateActivity()
+        }
+        result
     }
 
     /**
@@ -193,6 +218,7 @@ class BluetoothPrinterManager(private val context: Context) {
                 }
                 outputStream?.write(data)
                 outputStream?.flush()
+                updateActivity()  // Track successful print time
                 return Result.success(Unit)
             } catch (e: Exception) {
                 e.printStackTrace()

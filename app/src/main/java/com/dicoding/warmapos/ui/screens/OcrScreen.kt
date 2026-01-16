@@ -40,11 +40,14 @@ enum class InputMode {
 @Composable
 fun OcrScreen(
     viewModel: MainViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onNavigateToCart: (() -> Unit)? = null
 ) {
     val ocrResults by viewModel.ocrResults.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val products by viewModel.products.collectAsState()
+    val cartItems by viewModel.cartItems.collectAsState()
+    val cartTotal = viewModel.cartTotal
     
     // Use ViewModel state for image URI (persisted across tab switches)
     val selectedImageUri by viewModel.selectedImageUri.collectAsState()
@@ -96,11 +99,14 @@ fun OcrScreen(
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
+    // Main content wrapped in Box for cart preview overlay
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp)
+                .padding(bottom = if (cartItems.isNotEmpty()) 80.dp else 0.dp)
+        ) {
         // Mode Toggle Tabs
         TabRow(
             selectedTabIndex = if (inputMode == InputMode.OCR) 0 else 1,
@@ -166,6 +172,17 @@ fun OcrScreen(
                 }
             )
         }
+        }
+        
+        // Cart Preview Bar - floating at bottom
+        CartPreviewBar(
+            cartItems = cartItems,
+            cartTotal = cartTotal,
+            onNavigateToCart = onNavigateToCart,
+            onUpdateQuantity = { itemId, newQty -> viewModel.updateCartQuantity(itemId, newQty) },
+            onRemoveItem = { itemId -> viewModel.removeFromCart(itemId) },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 

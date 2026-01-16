@@ -59,6 +59,22 @@ class EscPosBuilder {
     }
 
     /**
+     * Set line spacing (default 30 dots for better readability)
+     */
+    fun setLineSpacing(dots: Int = 30): EscPosBuilder {
+        buffer.addAll(byteArrayOf(0x1B, 0x33, dots.toByte()).toList())
+        return this
+    }
+
+    /**
+     * Reset line spacing to default
+     */
+    fun resetLineSpacing(): EscPosBuilder {
+        buffer.addAll(byteArrayOf(0x1B, 0x32).toList())
+        return this
+    }
+
+    /**
      * Print text
      */
     fun print(text: String): EscPosBuilder {

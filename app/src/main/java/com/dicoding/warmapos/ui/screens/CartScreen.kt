@@ -142,7 +142,7 @@ fun CartScreen(
                     )
 
                     // Keterangan dropdown
-                    ExposedDropdownMenuBox(
+                        ExposedDropdownMenuBox(
                         expanded = keteranganExpanded,
                         onExpandedChange = { keteranganExpanded = it },
                         modifier = Modifier.weight(1f)

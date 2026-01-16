@@ -66,12 +66,22 @@ fun CropScreen(
         bitmap = loadBitmapFromUri(context, imageUri)
     }
     
+    // Hoisted screen dimensions for use in button onClick
+    var screenWidth by remember { mutableFloatStateOf(0f) }
+    var screenHeight by remember { mutableFloatStateOf(0f) }
+    
     Box(
         modifier = Modifier.fillMaxSize().background(Color.Black)
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val screenWidth = with(density) { maxWidth.toPx() }
-            val screenHeight = with(density) { maxHeight.toPx() }
+            val currentScreenWidth = with(density) { maxWidth.toPx() }
+            val currentScreenHeight = with(density) { maxHeight.toPx() }
+            
+            // Update hoisted values
+            LaunchedEffect(currentScreenWidth, currentScreenHeight) {
+                screenWidth = currentScreenWidth
+                screenHeight = currentScreenHeight
+            }
             
             // Initialize crop box
             if (!initialized && screenWidth > 0) {
@@ -275,7 +285,35 @@ fun CropScreen(
                     if (!isCropping) {
                         isCropping = true
                         bitmap?.let { bmp ->
-                            val croppedUri = saveCroppedImage(context, bmp)
+                            // Calculate crop region in image coordinates
+                            val canvasWidth = screenWidth
+                            val canvasHeight = screenHeight
+                            
+                            // Image dimensions
+                            val imgWidth = bmp.width.toFloat()
+                            val imgHeight = bmp.height.toFloat()
+                            
+                            // Fit image calculations (same as in Canvas)
+                            val fitScale = minOf(canvasWidth / imgWidth, canvasHeight / imgHeight)
+                            val scaledWidth = imgWidth * fitScale * scale
+                            val scaledHeight = imgHeight * fitScale * scale
+                            
+                            val left = (canvasWidth - scaledWidth) / 2 + offsetX
+                            val top = (canvasHeight - scaledHeight) / 2 + offsetY
+                            
+                            // Convert screen crop box to image coordinates
+                            val totalScale = fitScale * scale
+                            val imgCropLeft = ((cropLeft - left) / totalScale).coerceIn(0f, imgWidth)
+                            val imgCropTop = ((cropTop - top) / totalScale).coerceIn(0f, imgHeight)
+                            val imgCropRight = ((cropRight - left) / totalScale).coerceIn(0f, imgWidth)
+                            val imgCropBottom = ((cropBottom - top) / totalScale).coerceIn(0f, imgHeight)
+                            
+                            val cropX = imgCropLeft.toInt().coerceAtLeast(0)
+                            val cropY = imgCropTop.toInt().coerceAtLeast(0)
+                            val cropWidth = (imgCropRight - imgCropLeft).toInt().coerceAtLeast(1).coerceAtMost(bmp.width - cropX)
+                            val cropHeight = (imgCropBottom - imgCropTop).toInt().coerceAtLeast(1).coerceAtMost(bmp.height - cropY)
+                            
+                            val croppedUri = saveCroppedImage(context, bmp, cropX, cropY, cropWidth, cropHeight)
                             onCropComplete(croppedUri ?: imageUri)
                         }
                     }
@@ -302,10 +340,33 @@ private fun loadBitmapFromUri(context: Context, uri: Uri): Bitmap? {
     } catch (e: Exception) { null }
 }
 
-private fun saveCroppedImage(context: Context, bitmap: Bitmap): Uri? {
+/**
+ * Save cropped region of bitmap to file
+ */
+private fun saveCroppedImage(
+    context: Context, 
+    bitmap: Bitmap, 
+    cropX: Int, 
+    cropY: Int, 
+    cropWidth: Int, 
+    cropHeight: Int
+): Uri? {
     return try {
+        // Extract cropped region from bitmap
+        val croppedBitmap = Bitmap.createBitmap(bitmap, cropX, cropY, cropWidth, cropHeight)
+        
         val file = File(context.cacheDir, "crop_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.jpg")
-        FileOutputStream(file).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        FileOutputStream(file).use { croppedBitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        
+        // Recycle cropped bitmap if it's a different object
+        if (croppedBitmap != bitmap) {
+            croppedBitmap.recycle()
+        }
+        
         Uri.fromFile(file)
-    } catch (e: Exception) { null }
+    } catch (e: Exception) { 
+        e.printStackTrace()
+        null 
+    }
 }
+

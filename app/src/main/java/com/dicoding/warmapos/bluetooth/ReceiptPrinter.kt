@@ -76,22 +76,38 @@ class ReceiptPrinter(
 
         builder.alignLeft()
         builder.doubleSeparator()
+        
+        // Set line spacing for better readability
+        builder.setLineSpacing(32)
 
         // Items
         for (item in receipt.items) {
-            // Item name (wrap if too long)
+            // Item name (wrap if too long) - BOLD
             val name = if (item.name.length > design.paperWidth) {
                 item.name.take(design.paperWidth - 3) + "..."
             } else {
                 item.name
             }
+            builder.bold(true)
             builder.printLine(name)
+            builder.bold(false)
 
-            // Qty x Price = Subtotal
+            // Qty x Price = Subtotal (subtotal is bold)
             val detail = "  ${item.quantity} x ${formatNumber(item.price)}"
-            val subtotal = formatNumber(item.subtotal)
-            builder.printDoubleColumn(detail, subtotal)
+            val subtotal = "Rp${formatNumber(item.subtotal)}"
+            val space = design.paperWidth - detail.length - subtotal.length
+            if (space > 0) {
+                builder.print(detail + " ".repeat(space))
+            } else {
+                builder.print(detail.take(design.paperWidth - subtotal.length - 1) + " ")
+            }
+            builder.bold(true)
+            builder.printLine(subtotal)
+            builder.bold(false)
         }
+        
+        // Reset line spacing
+        builder.resetLineSpacing()
 
         builder.doubleSeparator()
 
