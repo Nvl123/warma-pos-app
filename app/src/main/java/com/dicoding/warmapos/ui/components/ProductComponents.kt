@@ -80,9 +80,9 @@ fun ProductCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = product.name,
+                    text = product.name.uppercase(),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -166,9 +166,9 @@ fun CartItemCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = cartItem.product.name,
+                    text = cartItem.product.name.uppercase(),
                     style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )

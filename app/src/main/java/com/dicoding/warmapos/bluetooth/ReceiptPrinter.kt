@@ -82,11 +82,12 @@ class ReceiptPrinter(
 
         // Items
         for (item in receipt.items) {
-            // Item name (wrap if too long) - BOLD
-            val name = if (item.name.length > design.paperWidth) {
-                item.name.take(design.paperWidth - 3) + "..."
+            // Item name (wrap if too long) - BOLD + UPPERCASE
+            val upperName = item.name.uppercase()
+            val name = if (upperName.length > design.paperWidth) {
+                upperName.take(design.paperWidth - 3) + "..."
             } else {
-                item.name
+                upperName
             }
             builder.bold(true)
             builder.printLine(name)
@@ -209,12 +210,13 @@ class ReceiptPrinter(
         lines.add("║${center("--- DAFTAR BELANJA ---").padEnd(width - 2)}║")
         lines.add("║${" ".repeat(width - 2)}║")
 
-        // Items
+        // Items - UPPERCASE
         for (item in receipt.items) {
-            val name = if (item.name.length > width - 4) {
-                item.name.take(width - 7) + "..."
+            val upperName = item.name.uppercase()
+            val name = if (upperName.length > width - 4) {
+                upperName.take(width - 7) + "..."
             } else {
-                item.name
+                upperName
             }
             lines.add("║ • $name".padEnd(width - 1) + "║")
 

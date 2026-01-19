@@ -8,4 +8,7 @@
     
     <!-- Internal files directory -->
     <files-path name="files" path="." />
+    
+    <!-- External public Documents folder for backup files -->
+    <external-path name="documents" path="Documents/" />
 </paths>
