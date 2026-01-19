@@ -143,33 +143,68 @@ class BluetoothPrinterManager(private val context: Context) {
     }
 
     /**
-     * Connect to a Bluetooth device
+     * Connect to a Bluetooth device with retry logic
+     * Includes cancelDiscovery, initial delay, and fallback socket method
      */
     @SuppressLint("MissingPermission")
     suspend fun connect(address: String): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            if (!hasBluetoothPermission()) {
-                return@withContext Result.failure(Exception("Bluetooth permission not granted"))
-            }
-
-            // Disconnect existing connection
-            disconnect()
-
-            val device = bluetoothAdapter?.getRemoteDevice(address)
-                ?: return@withContext Result.failure(Exception("Device not found"))
-
-            socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            socket?.connect()
-
-            outputStream = socket?.outputStream
-            connectedDevice = device
-
-            Result.success(Unit)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            disconnect()
-            Result.failure(e)
+        if (!hasBluetoothPermission()) {
+            return@withContext Result.failure(Exception("Bluetooth permission not granted"))
         }
+
+        val device = bluetoothAdapter?.getRemoteDevice(address)
+            ?: return@withContext Result.failure(Exception("Device not found"))
+
+        // Cancel discovery as it interferes with connection
+        try {
+            bluetoothAdapter?.cancelDiscovery()
+        } catch (e: Exception) {
+            android.util.Log.w("BluetoothPrinter", "Could not cancel discovery: ${e.message}")
+        }
+
+        var lastException: Exception? = null
+        val maxRetries = 3
+        
+        for (attempt in 1..maxRetries) {
+            try {
+                // Disconnect existing connection
+                disconnect()
+                
+                // Delay to let printer/Bluetooth stabilize
+                // First attempt: 300ms, subsequent: 500ms
+                val delayMs = if (attempt == 1) 300L else 500L
+                android.util.Log.d("BluetoothPrinter", "Connect attempt $attempt, waiting ${delayMs}ms...")
+                kotlinx.coroutines.delay(delayMs)
+
+                // Try standard method first, then fallback
+                socket = if (attempt <= 2) {
+                    device.createRfcommSocketToServiceRecord(SPP_UUID)
+                } else {
+                    // Fallback: use reflection to create socket on channel 1
+                    android.util.Log.d("BluetoothPrinter", "Using fallback socket method...")
+                    try {
+                        val method = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                        method.invoke(device, 1) as BluetoothSocket
+                    } catch (e: Exception) {
+                        device.createRfcommSocketToServiceRecord(SPP_UUID)
+                    }
+                }
+                
+                socket?.connect()
+
+                outputStream = socket?.outputStream
+                connectedDevice = device
+                
+                android.util.Log.d("BluetoothPrinter", "Connected successfully on attempt $attempt")
+                return@withContext Result.success(Unit)
+            } catch (e: Exception) {
+                android.util.Log.e("BluetoothPrinter", "Connect attempt $attempt failed: ${e.message}")
+                lastException = e
+                disconnect()
+            }
+        }
+        
+        Result.failure(lastException ?: Exception("Failed to connect after $maxRetries attempts"))
     }
     
     /**
