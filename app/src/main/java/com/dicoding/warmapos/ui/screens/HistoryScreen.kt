@@ -19,8 +19,12 @@ import com.dicoding.warmapos.data.repository.ReceiptHistoryItem
 import com.dicoding.warmapos.ui.MainViewModel
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.graphics.Color
+import com.dicoding.warmapos.data.model.Receipt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,8 +50,19 @@ fun HistoryScreen(
     var showCreateGroupDialog by remember { mutableStateOf(false) }
     var newGroupName by remember { mutableStateOf("") }
     
+    // Preview dialog state
+    var previewReceipt by remember { mutableStateOf<Receipt?>(null) }
+    
     LaunchedEffect(Unit) {
         viewModel.loadGroupedReceipts()
+    }
+    
+    // Receipt Preview Dialog
+    if (previewReceipt != null) {
+        ReceiptPreviewDialog(
+            receipt = previewReceipt!!,
+            onDismiss = { previewReceipt = null }
+        )
     }
     
     // Date picker dialog
@@ -508,6 +523,11 @@ fun HistoryScreen(
                         onReuse = {
                             viewModel.reuseReceipt(item)
                             onNavigateToCart?.invoke()
+                        },
+                        onLongPress = {
+                            if (!isSelectionMode) {
+                                previewReceipt = viewModel.getReceiptByPath(item.filePath)
+                            }
                         }
                     )
                 }
@@ -641,7 +661,7 @@ fun GroupHistoryItemCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HistoryItemCard(
     item: ReceiptHistoryItem,
@@ -651,17 +671,21 @@ fun HistoryItemCard(
     onItemClick: () -> Unit,
     onDelete: () -> Unit,
     onPrint: () -> Unit,
-    onReuse: () -> Unit
+    onReuse: () -> Unit,
+    onLongPress: () -> Unit = {}
 ) {
     var showActions by remember { mutableStateOf(false) }
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { 
-                if (isSelectionMode) onToggleSelection() 
-                else showActions = !showActions // Toggle action buttons
-            },
+            .combinedClickable(
+                onClick = { 
+                    if (isSelectionMode) onToggleSelection() 
+                    else showActions = !showActions
+                },
+                onLongClick = { onLongPress() }
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) 
@@ -775,4 +799,183 @@ enum class HistoryFilter(val label: String) {
 
 fun formatCurrency(amount: Int): String {
     return java.text.NumberFormat.getCurrencyInstance(java.util.Locale("id", "ID")).format(amount)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReceiptPreviewDialog(
+    receipt: Receipt,
+    onDismiss: () -> Unit
+) {
+    val sdf = java.text.SimpleDateFormat("dd MMM yyyy HH:mm", java.util.Locale.getDefault())
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = {
+            // Custom drag handle with close button
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Drag indicator
+                Box(
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+                )
+                
+                // Header with close button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "📋 Preview Struk",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            sdf.format(java.util.Date(receipt.timestamp)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Tutup",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 32.dp)
+        ) {
+            // Info row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Kasir: ${receipt.kasir}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (receipt.keterangan.isNotBlank()) {
+                    Text(
+                        "Ket: ${receipt.keterangan}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            if (receipt.lembarKe > 1) {
+                Text(
+                    "Lembar ke: ${receipt.lembarKe}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+            
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            
+            // Items list
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 350.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(receipt.items.size) { index ->
+                    val item = receipt.items[index]
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    item.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "${item.quantity} ${item.unit} × ${formatCurrency(item.price)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Text(
+                                formatCurrency(item.subtotal),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Total card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "TOTAL",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            "${receipt.items.sumOf { it.quantity }} item",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                    Text(
+                        receipt.formattedTotal(),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
+        }
+    }
 }

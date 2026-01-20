@@ -874,6 +874,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _receiptHistory.value = history
         }
     }
+    
+    fun getReceiptByPath(filePath: String): com.dicoding.warmapos.data.model.Receipt? {
+        return receiptRepository.loadReceipt(filePath)
+    }
 
     fun deleteReceipt(item: ReceiptHistoryItem) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -928,9 +932,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         quantity = receiptItem.quantity
                     )
                 }
-                _cartItems.value = newCartItems
                 withContext(Dispatchers.Main) {
-                    // Optional: Verify navigation handles this
+                    _cartItems.value = newCartItems
+                    editingReceiptPath = item.filePath
+                    _kasirName.value = receipt.kasir
+                    _lembarKe.value = receipt.lembarKe
+                    _keterangan.value = receipt.keterangan
+                    _successMessage.value = "Struk dimuat untuk diedit"
                 }
             }
         }
