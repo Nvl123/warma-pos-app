@@ -305,7 +305,7 @@ fun TotalCard(
                 )
             }
             Text(
-                text = "Rp${String.format("%,d", total).replace(',', '.')}",
+                text = "Rp ${String.format("%,d", total).replace(',', '.')}",
                 fontSize = fontSize,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary,

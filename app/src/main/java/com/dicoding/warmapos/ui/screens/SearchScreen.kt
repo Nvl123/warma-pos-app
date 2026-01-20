@@ -666,6 +666,6 @@ private fun CartPreviewItem(
 }
 
 private fun formatCartTotal(amount: Int): String {
-    return "Rp${String.format("%,d", amount).replace(',', '.')}"
+    return "Rp ${String.format("%,d", amount).replace(',', '.')}"
 }
 

@@ -206,7 +206,7 @@ data class ReceiptHistoryItem(
     val orderId: String
 ) {
     fun formattedTotal(): String {
-        return "Rp${String.format("%,d", totalAmount).replace(',', '.')}"
+        return "Rp ${String.format("%,d", totalAmount).replace(',', '.')}"
     }
 
     fun formattedTime(): String {

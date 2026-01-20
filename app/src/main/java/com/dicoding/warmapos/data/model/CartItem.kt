@@ -14,6 +14,6 @@ data class CartItem(
         get() = product.price * quantity
 
     fun formattedSubtotal(): String {
-        return "Rp${String.format("%,d", subtotal).replace(',', '.')}"
+        return "Rp ${String.format("%,d", subtotal).replace(',', '.')}"
     }
 }

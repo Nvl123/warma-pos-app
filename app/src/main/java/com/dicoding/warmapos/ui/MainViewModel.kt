@@ -266,7 +266,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 
                 fun formatCurrency(amount: Int): String {
-                    return "Rp${String.format("%,d", amount).replace(',', '.')}"
+                    return "Rp ${String.format("%,d", amount).replace(',', '.')}"
                 }
                 
                 // Use EscPosBuilder for proper formatting

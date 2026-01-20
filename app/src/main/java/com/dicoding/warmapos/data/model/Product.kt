@@ -11,6 +11,6 @@ data class Product(
     val unit: String = "pcs"
 ) {
     fun formattedPrice(): String {
-        return "Rp${String.format("%,d", price).replace(',', '.')}"
+        return "Rp ${String.format("%,d", price).replace(',', '.')}"
     }
 }

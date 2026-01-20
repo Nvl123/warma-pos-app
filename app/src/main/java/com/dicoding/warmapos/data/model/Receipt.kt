@@ -16,7 +16,7 @@ data class Receipt(
     val keterangan: String = ""
 ) {
     fun formattedTotal(): String {
-        return "Rp${String.format("%,d", total).replace(',', '.')}"
+        return "Rp ${String.format("%,d", total).replace(',', '.')}"
     }
 }
 

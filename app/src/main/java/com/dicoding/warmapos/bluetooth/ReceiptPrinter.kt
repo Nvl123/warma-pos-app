@@ -95,7 +95,7 @@ class ReceiptPrinter(
 
             // Qty x Price = Subtotal (subtotal is bold)
             val detail = "  ${item.quantity} x ${formatNumber(item.price)}"
-            val subtotal = "Rp${formatNumber(item.subtotal)}"
+            val subtotal = "Rp ${formatNumber(item.subtotal)}"
             val space = design.paperWidth - detail.length - subtotal.length
             if (space > 0) {
                 builder.print(detail + " ".repeat(space))
@@ -114,7 +114,7 @@ class ReceiptPrinter(
 
         // Total
         builder.bold(true)
-        builder.printDoubleColumn("TOTAL", "Rp${formatNumber(receipt.total)}")
+        builder.printDoubleColumn("TOTAL", "Rp ${formatNumber(receipt.total)}")
         builder.bold(false)
 
         builder.separator()
@@ -221,7 +221,7 @@ class ReceiptPrinter(
             lines.add("║ • $name".padEnd(width - 1) + "║")
 
             val detail = "   ${item.quantity}x @${formatNumber(item.price)}"
-            val subtotal = "Rp${formatNumber(item.subtotal)}"
+            val subtotal = "Rp ${formatNumber(item.subtotal)}"
             lines.add("║${doubleColumn(detail, subtotal).padEnd(width - 2)}║")
         }
 
@@ -229,7 +229,7 @@ class ReceiptPrinter(
         lines.add("╠${"═".repeat(width - 2)}╣")
         
         val totalLabel = "  TOTAL (${receipt.items.size} item)"
-        val totalValue = "Rp${formatNumber(receipt.total)}"
+        val totalValue = "Rp ${formatNumber(receipt.total)}"
         lines.add("║${doubleColumn(totalLabel, totalValue).padEnd(width - 2)}║")
         
         lines.add("╠${"═".repeat(width - 2)}╣")
