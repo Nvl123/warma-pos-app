@@ -11,10 +11,46 @@ class EscPosBuilder {
     var paperWidth: Int = 32
 
     /**
-     * Initialize printer
+     * Initialize printer with optimized settings for clearer number printing
      */
     fun init(): EscPosBuilder {
         buffer.addAll(ESC_INIT.toList())
+        // Set character spacing to 1 dot for clearer numbers (especially 8 and 6)
+        setCharacterSpacing(1)
+        return this
+    }
+    
+    /**
+     * Set character spacing (horizontal space between characters)
+     * Helps prevent numbers like 8 and 6 from appearing connected
+     * @param dots Number of dots to add between characters (0-255, recommended: 1-2)
+     */
+    fun setCharacterSpacing(dots: Int = 1): EscPosBuilder {
+        // ESC SP n - Set right-side character spacing
+        buffer.addAll(byteArrayOf(0x1B, 0x20, dots.coerceIn(0, 255).toByte()).toList())
+        return this
+    }
+    
+    /**
+     * Select font (Font A or Font B)
+     * Font B is typically narrower and may print numbers more clearly
+     */
+    fun selectFont(fontB: Boolean = false): EscPosBuilder {
+        // ESC M n - Select font
+        buffer.addAll(byteArrayOf(0x1B, 0x4D, if (fontB) 0x01 else 0x00).toList())
+        return this
+    }
+    
+    /**
+     * Set print density/darkness
+     * Lower density may help prevent number bleeding on some printers
+     * @param heating Heating dots (0-7), lower = lighter print
+     * @param breakTime Break time (0-7), higher = more cooling time
+     */
+    fun setPrintDensity(heating: Int = 7, breakTime: Int = 7): EscPosBuilder {
+        // DC2 # n - Set print density
+        val density = ((breakTime and 0x07) shl 5) or (heating and 0x1F)
+        buffer.addAll(byteArrayOf(0x12, 0x23, density.toByte()).toList())
         return this
     }
 

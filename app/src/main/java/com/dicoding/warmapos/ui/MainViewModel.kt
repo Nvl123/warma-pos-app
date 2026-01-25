@@ -488,6 +488,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ===== SEARCH =====
     private var searchJob: kotlinx.coroutines.Job? = null
     
+    // Simple search results (List<Product> tanpa score)
+    private val _simpleSearchResults = MutableStateFlow<List<Product>>(emptyList())
+    val simpleSearchResults: StateFlow<List<Product>> = _simpleSearchResults.asStateFlow()
+    
+    // Keyword suggestions untuk autocomplete
+    private val _searchSuggestions = MutableStateFlow<List<String>>(emptyList())
+    val searchSuggestions: StateFlow<List<String>> = _searchSuggestions.asStateFlow()
+    
+    /**
+     * Simple search - pencarian tanpa fuzzy, menggunakan substring match
+     * Tidak dibatasi jumlah outputnya, dengan saran keyword seperti Google
+     */
+    fun simpleSearchProducts(query: String) {
+        searchJob?.cancel()
+        
+        if (query.isBlank()) {
+            _simpleSearchResults.value = emptyList()
+            _searchSuggestions.value = emptyList()
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            // Small delay to debounce rapid typing
+            kotlinx.coroutines.delay(100)
+            
+            withContext(Dispatchers.Default) {
+                val (processedQuery, _, _) = synonymRepository.applySynonyms(query)
+                
+                // Get suggestions (untuk autocomplete)
+                val suggestions = productMatcher.getSuggestions(processedQuery)
+                _searchSuggestions.value = suggestions
+                
+                // Get all matching products (no limit)
+                val results = productMatcher.simpleSearch(processedQuery)
+                _simpleSearchResults.value = results
+            }
+        }
+    }
+    
+    /**
+     * Apply suggestion - ketika user memilih saran keyword
+     */
+    fun applySuggestion(suggestion: String): List<Product> {
+        _searchSuggestions.value = emptyList()
+        val results = productMatcher.simpleSearch(suggestion)
+        _simpleSearchResults.value = results
+        return results
+    }
+    
+    fun clearSimpleSearch() {
+        _simpleSearchResults.value = emptyList()
+        _searchSuggestions.value = emptyList()
+    }
+    
+    // OLD fuzzy search - kept for OCR compatibility
     fun searchProducts(query: String) {
         searchJob?.cancel()
         

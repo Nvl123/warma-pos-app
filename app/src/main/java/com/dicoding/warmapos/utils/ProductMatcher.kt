@@ -107,4 +107,94 @@ class ProductMatcher(private var products: List<Product> = emptyList()) {
     }
 
     fun getProductCount(): Int = products.size
+
+    /**
+     * Simple search - finds all products containing the query text (substring match)
+     * Results are sorted by relevance: exact match > starts with > contains
+     * No limit on output count - returns ALL matching products
+     */
+    fun simpleSearch(query: String): List<Product> {
+        if (query.isBlank() || products.isEmpty()) {
+            return emptyList()
+        }
+
+        val queryLower = query.lowercase().trim()
+        val queryTokens = queryLower.split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+        return products
+            .filter { product ->
+                val nameLower = product.name.lowercase()
+                // Match if all query tokens are found in product name
+                queryTokens.all { token -> nameLower.contains(token) }
+            }
+            .sortedWith(compareBy(
+                // Priority 1: Exact match (highest)
+                { product -> if (product.name.lowercase() == queryLower) 0 else 1 },
+                // Priority 2: Starts with the query
+                { product -> if (product.name.lowercase().startsWith(queryLower)) 0 else 1 },
+                // Priority 3: Alphabetical order
+                { product -> product.name.lowercase() }
+            ))
+    }
+
+    /**
+     * Get keyword suggestions based on partial query (like Google autocomplete)
+     * Returns unique keywords/product names that match the input
+     */
+    fun getSuggestions(query: String, maxSuggestions: Int = 8): List<String> {
+        if (query.isBlank() || products.isEmpty()) {
+            return emptyList()
+        }
+
+        val queryLower = query.lowercase().trim()
+        
+        // Get unique keywords from product names
+        val keywords = mutableSetOf<String>()
+        
+        products.forEach { product ->
+            val nameLower = product.name.lowercase()
+            
+            // Add product name if it contains the query
+            if (nameLower.contains(queryLower)) {
+                // Extract most relevant keyword part
+                val words = product.name.split(Regex("\\s+"))
+                
+                // Add individual words that match
+                words.forEach { word ->
+                    if (word.lowercase().startsWith(queryLower) && word.length > 2) {
+                        keywords.add(word)
+                    }
+                }
+                
+                // Add 2-word combinations that start with matching word
+                for (i in words.indices) {
+                    if (words[i].lowercase().startsWith(queryLower)) {
+                        // Add 2-word combination
+                        if (i + 1 < words.size) {
+                            keywords.add("${words[i]} ${words[i + 1]}")
+                        }
+                        // Add single word
+                        if (words[i].length > 2) {
+                            keywords.add(words[i])
+                        }
+                    }
+                }
+
+                // Add full product name if short enough and starts with query
+                if (product.name.length <= 30 && nameLower.startsWith(queryLower)) {
+                    keywords.add(product.name)
+                }
+            }
+        }
+
+        return keywords
+            .filter { it.lowercase() != queryLower && it.lowercase().startsWith(queryLower) }
+            .sortedWith(compareBy(
+                // Priority 1: Length (shorter suggestions first)
+                { it.length },
+                // Priority 2: Alphabetical
+                { it.lowercase() }
+            ))
+            .take(maxSuggestions)
+    }
 }

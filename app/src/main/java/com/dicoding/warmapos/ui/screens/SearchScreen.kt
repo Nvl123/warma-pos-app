@@ -2,6 +2,7 @@ package com.dicoding.warmapos.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,10 +21,12 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +44,9 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     onNavigateToCart: (() -> Unit)? = null
 ) {
-    val searchResults by viewModel.searchResults.collectAsState()
+    // Menggunakan simple search results (tanpa score)
+    val searchResults by viewModel.simpleSearchResults.collectAsState()
+    val searchSuggestions by viewModel.searchSuggestions.collectAsState()
     val productCount by viewModel.productCount.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
     val cartTotal = viewModel.cartTotal
@@ -83,26 +88,90 @@ fun SearchScreen(
                 }
             }
             
-            // Search field - scrolls with content
+            // Search field with suggestions - scrolls with content
             item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { query ->
-                        searchQuery = query
-                        viewModel.searchProducts(query)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Ketik nama produk...") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                Column {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { query ->
+                            searchQuery = query
+                            viewModel.simpleSearchProducts(query)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Ketik nama produk...") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                    viewModel.clearSimpleSearch()
+                                }) {
+                                    Icon(Icons.Default.Close, "Hapus", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        )
                     )
-                )
+                    
+                    // Keyword Suggestions (like Google)
+                    AnimatedVisibility(
+                        visible = searchSuggestions.isNotEmpty(),
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    "Saran Pencarian:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                                )
+                                searchSuggestions.forEach { suggestion ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                searchQuery = suggestion
+                                                viewModel.applySuggestion(suggestion)
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.TrendingUp,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = suggestion,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             
             // Results counter
@@ -115,12 +184,11 @@ fun SearchScreen(
                 )
             }
             
-            // Product items
-            items(searchResults) { match ->
-                EnhancedProductCard(
-                    product = match.product,
-                    score = match.score,
-                    onAdd = { qty -> viewModel.addToCart(match.product, qty) }
+            // Product items (tanpa score)
+            items(searchResults) { product ->
+                SimpleProductCard(
+                    product = product,
+                    onAdd = { qty -> viewModel.addToCart(product, qty) }
                 )
             }
         }
@@ -155,25 +223,89 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Search field
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { query ->
-                        searchQuery = query
-                        viewModel.searchProducts(query)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Ketik nama produk...") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                // Search field with suggestions
+                Column {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { query ->
+                            searchQuery = query
+                            viewModel.simpleSearchProducts(query)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Ketik nama produk...") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                    viewModel.clearSimpleSearch()
+                                }) {
+                                    Icon(Icons.Default.Close, "Hapus", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary
+                        )
                     )
-                )
+                    
+                    // Keyword Suggestions (like Google)
+                    AnimatedVisibility(
+                        visible = searchSuggestions.isNotEmpty(),
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Text(
+                                    "Saran Pencarian:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
+                                )
+                                searchSuggestions.forEach { suggestion ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                searchQuery = suggestion
+                                                viewModel.applySuggestion(suggestion)
+                                            }
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.TrendingUp,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Text(
+                                            text = suggestion,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -250,6 +382,119 @@ fun SearchScreen(
             onRemoveItem = { itemId -> viewModel.removeFromCart(itemId) },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+    }
+}
+
+/**
+ * Simple Product Card - tanpa score/persentase match
+ * UI lebih bersih untuk pencarian biasa
+ */
+@Composable
+fun SimpleProductCard(
+    product: Product,
+    onAdd: (Int) -> Unit
+) {
+    var quantity by remember { mutableStateOf(1) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Product info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = product.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = product.formattedPrice(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "/ ${product.unit}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (product.category.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = product.category,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Quantity selector and add button
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FilledTonalIconButton(
+                        onClick = { if (quantity > 1) quantity-- },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text("-", fontWeight = FontWeight.Bold)
+                    }
+                    Text(
+                        text = "$quantity",
+                        modifier = Modifier.width(24.dp),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold
+                    )
+                    FilledTonalIconButton(
+                        onClick = { quantity++ },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text("+", fontWeight = FontWeight.Bold)
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+                FilledIconButton(
+                    onClick = { 
+                        onAdd(quantity)
+                        quantity = 1
+                    },
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Tambah")
+                }
+            }
+        }
     }
 }
 
