@@ -94,23 +94,12 @@ class ReceiptPrinter(
             builder.bold(false)
 
             // Qty x Price = Subtotal (subtotal is bold)
+            // Keep full detail and subtotal, just reduce space between them if needed
+            val detail = "  ${item.quantity} x ${formatNumber(item.price)}"
             val subtotal = "Rp ${formatNumber(item.subtotal)}"
-            // Calculate available space for detail, ensuring subtotal always fits
-            val maxDetailLen = design.paperWidth - subtotal.length - 1  // -1 for minimum 1 space
-            val fullDetail = "  ${item.quantity} x ${formatNumber(item.price)}"
-            val detail = if (fullDetail.length > maxDetailLen) {
-                // Truncate detail to fit, keep at least qty info
-                val minDetail = "  ${item.quantity}x"
-                if (minDetail.length <= maxDetailLen) {
-                    fullDetail.take(maxDetailLen)
-                } else {
-                    minDetail.take(maxDetailLen)
-                }
-            } else {
-                fullDetail
-            }
             val space = design.paperWidth - detail.length - subtotal.length
-            builder.print(detail + " ".repeat(space.coerceAtLeast(1)))
+            // Use at least 0 space (they can touch if needed to fit in one line)
+            builder.print(detail + " ".repeat(space.coerceAtLeast(0)))
             builder.bold(true)
             builder.printLine(subtotal)
             builder.bold(false)

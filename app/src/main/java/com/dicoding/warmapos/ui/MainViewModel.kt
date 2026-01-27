@@ -257,18 +257,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val sdf = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
                 val width = design.paperWidth
                 
-                // Helper function for aligned columns with colon - value always fits, label gets truncated if needed
+                // Helper function for aligned columns with colon - reduce space if needed, don't truncate
                 fun alignedRow(label: String, value: String): String {
                     val labelWithColon = "$label:"
-                    val minSpace = 1  // Minimum 1 space between label and value
-                    val maxLabelLen = width - value.length - minSpace
-                    val truncatedLabel = if (labelWithColon.length > maxLabelLen) {
-                        labelWithColon.take(maxLabelLen.coerceAtLeast(1))
-                    } else {
-                        labelWithColon
-                    }
-                    val space = width - truncatedLabel.length - value.length
-                    return truncatedLabel + " ".repeat(space.coerceAtLeast(1)) + value
+                    val space = width - labelWithColon.length - value.length
+                    // Allow 0 space if needed to fit in one line
+                    return labelWithColon + " ".repeat(space.coerceAtLeast(0)) + value
                 }
                 
                 fun formatCurrency(amount: Int): String {

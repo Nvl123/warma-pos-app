@@ -130,18 +130,12 @@ class EscPosBuilder {
 
     /**
      * Print two columns (left and right aligned)
-     * Right column (value/nominal) always fits, left column gets truncated if needed
+     * Reduce space between columns if needed (can be 0), don't truncate
      */
     fun printDoubleColumn(left: String, right: String): EscPosBuilder {
-        val minSpace = 1  // Minimum 1 space between columns
-        val maxLeftLen = paperWidth - right.length - minSpace
-        val truncatedLeft = if (left.length > maxLeftLen) {
-            left.take(maxLeftLen.coerceAtLeast(1))
-        } else {
-            left
-        }
-        val space = paperWidth - truncatedLeft.length - right.length
-        val line = truncatedLeft + " ".repeat(space.coerceAtLeast(1)) + right
+        val space = paperWidth - left.length - right.length
+        // Allow 0 space if needed to fit in one line
+        val line = left + " ".repeat(space.coerceAtLeast(0)) + right
         printLine(line)
         return this
     }
