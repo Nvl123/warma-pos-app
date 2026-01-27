@@ -55,18 +55,16 @@ fun SearchScreen(
     
     // Use Box to layer the cart preview bar on top
     Box(modifier = modifier.fillMaxSize()) {
-        // Main content
-        if (searchResults.isNotEmpty()) {
-            // When results exist, use LazyColumn for collapsing header effect
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp)
-                    .padding(bottom = if (cartItems.isNotEmpty()) 80.dp else 0.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+        // Main content - ALWAYS use LazyColumn for consistent layout
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp)
+                .padding(bottom = if (cartItems.isNotEmpty()) 80.dp else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // Header card - scrolls with content
-            item {
+            item(key = "header") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -88,8 +86,8 @@ fun SearchScreen(
                 }
             }
             
-            // Search field with suggestions - scrolls with content
-            item {
+            // Search field with suggestions - stable key prevents recreation
+            item(key = "search_field") {
                 Column {
                     OutlinedTextField(
                         value = searchQuery,
@@ -174,145 +172,30 @@ fun SearchScreen(
                 }
             }
             
-            // Results counter
-            item {
-                Text(
-                    "${searchResults.size} hasil ditemukan",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            
-            // Product items (tanpa score)
-            items(searchResults) { product ->
-                SimpleProductCard(
-                    product = product,
-                    onAdd = { qty -> viewModel.addToCart(product, qty) }
-                )
-            }
-        }
-        } else {
-            // No results - use fixed Column layout
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp)
-                    .padding(bottom = if (cartItems.isNotEmpty()) 80.dp else 0.dp)
-            ) {
-                // Header card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "🔍 Cari Produk",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            "$productCount produk tersedia • ${cartItems.size} di keranjang",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Search field with suggestions
-                Column {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { query ->
-                            searchQuery = query
-                            viewModel.simpleSearchProducts(query)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Ketik nama produk...") },
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.primary)
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    searchQuery = ""
-                                    viewModel.clearSimpleSearch()
-                                }) {
-                                    Icon(Icons.Default.Close, "Hapus", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            focusedLeadingIconColor = MaterialTheme.colorScheme.primary
-                        )
+            // Content based on state - all within LazyColumn
+            if (searchResults.isNotEmpty()) {
+                // Results counter
+                item(key = "results_counter") {
+                    Text(
+                        "${searchResults.size} hasil ditemukan",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    
-                    // Keyword Suggestions (like Google)
-                    AnimatedVisibility(
-                        visible = searchSuggestions.isNotEmpty(),
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(
-                                    "Saran Pencarian:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
-                                )
-                                searchSuggestions.forEach { suggestion ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                searchQuery = suggestion
-                                                viewModel.applySuggestion(suggestion)
-                                            }
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.TrendingUp,
-                                            null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = suggestion,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
+                
+                // Product items (tanpa score)
+                items(searchResults, key = { it.sku }) { product ->
+                    SimpleProductCard(
+                        product = product,
+                        onAdd = { qty -> viewModel.addToCart(product, qty) }
+                    )
+                }
+            } else if (searchQuery.isNotEmpty()) {
                 // No results state
-                if (searchQuery.isNotEmpty()) {
+                item(key = "no_results") {
                     Box(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Card(
@@ -341,10 +224,12 @@ fun SearchScreen(
                             }
                         }
                     }
-                } else {
-                    // Empty state (no search yet)
+                }
+            } else {
+                // Empty state (no search yet)
+                item(key = "empty_state") {
                     Box(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -384,6 +269,7 @@ fun SearchScreen(
         )
     }
 }
+
 
 /**
  * Simple Product Card - tanpa score/persentase match

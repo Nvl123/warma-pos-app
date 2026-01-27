@@ -79,6 +79,8 @@ class ReceiptPrinter(
         
         // Set line spacing for better readability
         builder.setLineSpacing(32)
+        // Reset character spacing for items (to prevent extra width)
+        builder.setCharacterSpacing(0)
 
         // Items
         for (item in receipt.items) {
@@ -93,16 +95,29 @@ class ReceiptPrinter(
             builder.printLine(name)
             builder.bold(false)
 
-            // Qty x Price = Subtotal (subtotal is bold)
-            // Keep full detail and subtotal, just reduce space between them if needed
-            val detail = "  ${item.quantity} x ${formatNumber(item.price)}"
-            val subtotal = "Rp ${formatNumber(item.subtotal)}"
-            val space = design.paperWidth - detail.length - subtotal.length
-            // Use at least 0 space (they can touch if needed to fit in one line)
-            builder.print(detail + " ".repeat(space.coerceAtLeast(0)))
-            builder.bold(true)
-            builder.printLine(subtotal)
-            builder.bold(false)
+            // Qty x Price and Subtotal (adaptive spacing on same line)
+            val priceStr = formatNumber(item.price)
+            val subtotalStr = "Rp${formatNumber(item.subtotal)}"
+            val detail = "${item.quantity}x$priceStr"
+            
+            // Calculate space needed - ensure single line
+            val contentLen = detail.length + subtotalStr.length
+            val availableSpace = design.paperWidth - contentLen
+            
+            // Build line with adaptive spacing (minimum 1 space)
+            val line = if (availableSpace > 0) {
+                detail + " ".repeat(availableSpace) + subtotalStr
+            } else {
+                // If too long, minimize detail to fit
+                val shortDetail = "${item.quantity}x"
+                val shortSpace = design.paperWidth - shortDetail.length - subtotalStr.length
+                if (shortSpace > 0) {
+                    shortDetail + " ".repeat(shortSpace) + subtotalStr
+                } else {
+                    "$detail $subtotalStr"
+                }
+            }
+            builder.printLine(line)
         }
         
         // Reset line spacing
