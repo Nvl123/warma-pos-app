@@ -110,7 +110,7 @@ fun ProductCard(
                     text = quantity.toString(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.width(24.dp),
+                    modifier = Modifier.widthIn(min = 28.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 
@@ -223,7 +223,7 @@ fun CartItemCard(
                             onQuantityChange(qty)
                         }
                     },
-                    modifier = Modifier.width(48.dp),
+                    modifier = Modifier.width(64.dp),
                     textStyle = MaterialTheme.typography.bodySmall.copy(
                         fontWeight = FontWeight.Bold,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center

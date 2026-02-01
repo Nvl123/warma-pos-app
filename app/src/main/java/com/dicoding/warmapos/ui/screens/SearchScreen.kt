@@ -354,7 +354,7 @@ fun SimpleProductCard(
                     }
                     Text(
                         text = "$quantity",
-                        modifier = Modifier.width(24.dp),
+                        modifier = Modifier.widthIn(min = 28.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold
                     )
@@ -485,7 +485,7 @@ fun EnhancedProductCard(
                     }
                     Text(
                         text = "$quantity",
-                        modifier = Modifier.width(24.dp),
+                        modifier = Modifier.widthIn(min = 28.dp),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold
                     )
