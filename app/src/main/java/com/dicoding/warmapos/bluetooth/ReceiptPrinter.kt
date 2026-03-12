@@ -1,5 +1,6 @@
 package com.dicoding.warmapos.bluetooth
 
+import android.content.Context
 import com.dicoding.warmapos.data.model.Receipt
 import com.dicoding.warmapos.data.model.ReceiptDesign
 import java.text.SimpleDateFormat
@@ -7,47 +8,69 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Receipt printer utility for formatting and printing receipts
+ * Receipt printer utility for formatting and printing receipts.
+ * Renders the receipt as a Poppins-font Bitmap image before sending to the printer.
  */
 class ReceiptPrinter(
-    private val printerManager: BluetoothPrinterManager
+    private val printerManager: BluetoothPrinterManager,
+    private val context: Context
 ) {
 
     /**
-     * Print a receipt
+     * Print a receipt as a Poppins-font bitmap image.
+     * Falls back to plain text if bitmap rendering fails.
      */
     suspend fun printReceipt(
         receipt: Receipt,
         design: ReceiptDesign
     ): Result<Unit> {
+        try {
+            // --- Bitmap path (primary) ---
+            val renderer = ReceiptBitmapRenderer(context)
+            val bitmap = renderer.render(receipt, design)
+
+            val maxWidthDots = if (design.paperWidth >= 48) 576 else 384
+
+            val builder = EscPosBuilder()
+            builder.init()
+            builder.alignCenter()  // align center for the image
+            builder.printBitmap(bitmap, maxWidthDots)
+            bitmap.recycle()
+            builder.feed(3)
+            builder.cut()
+
+            return printerManager.sendRaw(builder.build())
+        } catch (e: Exception) {
+            android.util.Log.e("ReceiptPrinter", "Bitmap print failed, falling back to text: ${e.message}")
+            return printReceiptText(receipt, design)
+        }
+    }
+
+    /**
+     * Fallback: plain text receipt using ESC/POS text commands
+     */
+    private suspend fun printReceiptText(
+        receipt: Receipt,
+        design: ReceiptDesign
+    ): Result<Unit> {
         val builder = EscPosBuilder()
         builder.paperWidth = design.paperWidth
-
-        // Initialize
         builder.init()
-
-        // Add 2 blank lines at top for spacing
         builder.feed(2)
 
-        // Lembar Ke and Keterangan row (left-right aligned)
+        // Lembar Ke / Keterangan
         val lembarText = "Lembar ke: ${receipt.lembarKe}"
         val ketText = if (receipt.keterangan.isNotBlank()) "Ket: ${receipt.keterangan}" else ""
-        if (ketText.isNotBlank()) {
-            builder.alignLeft()
-            builder.printDoubleColumn(lembarText, ketText)
-        } else {
-            builder.alignLeft()
-            builder.printLine(lembarText)
-        }
+        builder.alignLeft()
+        if (ketText.isNotBlank()) builder.printDoubleColumn(lembarText, ketText)
+        else builder.printLine(lembarText)
         builder.separator()
 
-        // Header text (if any)
         if (design.headerText.isNotBlank()) {
             builder.alignCenter()
             builder.printLine(design.headerText)
         }
 
-        // Store name
         builder.alignCenter()
         builder.bold(true)
         builder.doubleSize(true)
@@ -55,88 +78,44 @@ class ReceiptPrinter(
         builder.doubleSize(false)
         builder.bold(false)
 
-        // Store info
-        if (design.storeAddress.isNotBlank()) {
-            builder.printLine(design.storeAddress)
-        }
-        if (design.storePhone.isNotBlank()) {
-            builder.printLine(design.storePhone)
-        }
+        if (design.storeAddress.isNotBlank()) builder.printLine(design.storeAddress)
+        if (design.storePhone.isNotBlank()) builder.printLine(design.storePhone)
 
-        // Date/Time
         if (design.showDateTime) {
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
             builder.printLine(dateFormat.format(Date(receipt.timestamp)))
         }
-
-        // Kasir
-        if (design.showKasir) {
-            builder.printLine("Kasir: ${receipt.kasir}")
-        }
+        if (design.showKasir) builder.printLine("Kasir: ${receipt.kasir}")
 
         builder.alignLeft()
         builder.doubleSeparator()
-        
-        // Set line spacing for better readability
         builder.setLineSpacing(32)
-        // Reset character spacing for items (to prevent extra width)
         builder.setCharacterSpacing(0)
 
-        // Items
         for (item in receipt.items) {
-            // Item name (wrap if too long) - BOLD + UPPERCASE
-            val upperName = item.name.uppercase()
-            val name = if (upperName.length > design.paperWidth) {
-                upperName.take(design.paperWidth - 3) + "..."
-            } else {
-                upperName
+            val name = item.name.uppercase().let {
+                if (it.length > design.paperWidth) it.take(design.paperWidth - 3) + "..." else it
             }
             builder.bold(true)
             builder.printLine(name)
             builder.bold(false)
 
-            // Qty x Price and Subtotal (adaptive spacing on same line)
             val priceStr = formatNumber(item.price)
             val subtotalStr = "Rp${formatNumber(item.subtotal)}"
-            val detail = "${item.quantity}x$priceStr"
-            
-            // Calculate space needed - ensure single line
-            val contentLen = detail.length + subtotalStr.length
-            val availableSpace = design.paperWidth - contentLen
-            
-            // Build line with adaptive spacing (minimum 1 space)
-            val line = if (availableSpace > 0) {
-                detail + " ".repeat(availableSpace) + subtotalStr
-            } else {
-                // If too long, minimize detail to fit
-                val shortDetail = "${item.quantity}x"
-                val shortSpace = design.paperWidth - shortDetail.length - subtotalStr.length
-                if (shortSpace > 0) {
-                    shortDetail + " ".repeat(shortSpace) + subtotalStr
-                } else {
-                    "$detail $subtotalStr"
-                }
-            }
+            val detail = "${item.quantity} x $priceStr"
+            val space = design.paperWidth - detail.length - subtotalStr.length
+            val line = if (space > 0) detail + " ".repeat(space) + subtotalStr else "$detail $subtotalStr"
             builder.printLine(line)
         }
-        
-        // Reset line spacing
+
         builder.resetLineSpacing()
-
         builder.doubleSeparator()
-
-        // Total
         builder.bold(true)
         builder.printDoubleColumn("TOTAL", "Rp ${formatNumber(receipt.total)}")
         builder.bold(false)
-
         builder.separator()
-
-        // Footer
         builder.alignCenter()
         builder.printLine(design.footerText)
-
-        // Feed and cut
         builder.feed(3)
         builder.cut()
 
@@ -233,7 +212,7 @@ class ReceiptPrinter(
             }
             lines.add("║ • $name".padEnd(width - 1) + "║")
 
-            val detail = "   ${item.quantity}x @${formatNumber(item.price)}"
+            val detail = "   ${item.quantity} x @${formatNumber(item.price)}"
             val subtotal = "Rp ${formatNumber(item.subtotal)}"
             lines.add("║${doubleColumn(detail, subtotal).padEnd(width - 2)}║")
         }

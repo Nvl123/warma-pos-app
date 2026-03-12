@@ -958,8 +958,8 @@ fun ProductManagementSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            filteredProducts.forEach { product ->
-                key(product.name) {
+            filteredProducts.forEachIndexed { index, product ->
+                key("${index}_${product.name}_${product.price}") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
@@ -983,7 +983,7 @@ fun ProductManagementSection(
                             }) {
                                 Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary)
                             }
-                            IconButton(onClick = { viewModel.deleteProduct(product.name) }) {
+                            IconButton(onClick = { viewModel.deleteProduct(product.name, product.price) }) {
                                 Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
                             }
                         }
@@ -1027,7 +1027,7 @@ fun ProductManagementSection(
                 editingProduct = null
             },
             onSave = { name, sku, category, price, unit ->
-                viewModel.updateProduct(editingProduct!!.name, name, sku, category, price, unit)
+                viewModel.updateProduct(editingProduct!!.name, editingProduct!!.price, name, sku, category, price, unit)
                 showEditDialog = false
                 editingProduct = null
             }

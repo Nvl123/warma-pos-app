@@ -37,7 +37,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val ocrHandler = OcrHandler(application)
     private val mlKitOcrHandler = MlKitOcrHandler(application)
     val printerManager = BluetoothPrinterManager(application)
-    private val receiptPrinter = ReceiptPrinter(printerManager)
+    private val receiptPrinter = ReceiptPrinter(printerManager, application)
 
     // UI State
     private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
@@ -572,7 +572,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addToCart(product: Product, quantity: Int = 1) {
         val currentItems = _cartItems.value.toMutableList()
         val existingIndex = currentItems.indexOfFirst {
-            it.product.name.equals(product.name, ignoreCase = true)
+            it.product.name?.equals(product.name, ignoreCase = true) == true && 
+            it.product.price == product.price
         }
 
         if (existingIndex >= 0) {
@@ -718,32 +719,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             keterangan = _keterangan.value
         )
 
-        return if (editingReceiptPath != null) {
-            if (receiptRepository.updateReceipt(receipt, editingReceiptPath!!)) {
-                refreshReceiptHistory()
-                _successMessage.value = "Struk diperbarui"
-                clearCart()  // Clear cart after update
-                editingReceiptPath
-            } else null
-        } else {
-            val path = receiptRepository.saveReceipt(receipt)
-            refreshReceiptHistory()
-            _successMessage.value = "Struk tersimpan"
-            clearCart()  // Clear cart after save
-            path
-        }
+        // Always save as a new receipt instead of replacing
+        val path = receiptRepository.saveReceipt(receipt)
+        refreshReceiptHistory()
+        _successMessage.value = "Struk tersimpan"
+        clearCart()  // Clear cart after save
+        return path
     }
 
     fun loadReceiptToCart(path: String) {
         val receipt = receiptRepository.loadReceipt(path) ?: return
 
         val cartItems = receipt.items.map { item ->
-            val existingProduct = productRepository.getProductByName(item.name)
+            val existingProduct = productRepository.getProduct(item.name ?: "Unknown", item.price)
             val product = existingProduct ?: Product(
-                name = item.name,
-                sku = item.sku,
+                name = item.name ?: "Unknown",
+                sku = item.sku ?: "",
                 price = item.price,
-                unit = item.unit
+                unit = item.unit ?: "pcs"
             )
             CartItem(product = product, quantity = item.quantity)
         }
@@ -977,10 +970,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (receipt != null) {
                 val newCartItems = receipt.items.map { receiptItem ->
                     val product = Product(
-                        name = receiptItem.name,
-                        sku = receiptItem.sku,
+                        name = receiptItem.name ?: "Unknown",
+                        sku = receiptItem.sku ?: "",
                         price = receiptItem.price,
-                        unit = receiptItem.unit
+                        unit = receiptItem.unit ?: "pcs"
                     )
                     CartItem(
                         product = product,
@@ -990,9 +983,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.Main) {
                     _cartItems.value = newCartItems
                     editingReceiptPath = item.filePath
-                    _kasirName.value = receipt.kasir
+                    _kasirName.value = receipt.kasir ?: "Kasir"
                     _lembarKe.value = receipt.lembarKe
-                    _keterangan.value = receipt.keterangan
+                    _keterangan.value = receipt.keterangan ?: ""
                     _successMessage.value = "Struk dimuat untuk diedit"
                 }
             }
@@ -1012,9 +1005,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return success
     }
     
-    fun updateProduct(oldName: String, name: String, sku: String, category: String, price: Int, unit: String): Boolean {
+    fun updateProduct(oldName: String, oldPrice: Int, name: String, sku: String, category: String, price: Int, unit: String): Boolean {
         val product = Product(name = name, sku = sku, category = category, price = price, unit = unit)
-        val success = productRepository.updateProduct(oldName, product)
+        val success = productRepository.updateProduct(oldName, oldPrice, product)
         if (success) {
             refreshProducts()
             _successMessage.value = "Produk diperbarui"
@@ -1024,8 +1017,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return success
     }
     
-    fun deleteProduct(productName: String): Boolean {
-        val success = productRepository.deleteProduct(productName)
+    fun deleteProduct(productName: String, productPrice: Int): Boolean {
+        val success = productRepository.deleteProduct(productName, productPrice)
         if (success) {
             // Immediately update state on main thread for instant UI refresh
             val updatedProducts = productRepository.getProducts()

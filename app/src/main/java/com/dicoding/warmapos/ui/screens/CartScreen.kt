@@ -5,8 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.DeleteForever
@@ -16,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -339,34 +340,67 @@ fun ReceiptPreviewDialog(
     onDismiss: () -> Unit,
     onSaveAndPrint: () -> Unit
 ) {
-    val preview = viewModel.generateReceiptPreview()
+    val design by viewModel.receiptDesign.collectAsState()
+    val kasirName by viewModel.kasirName.collectAsState()
+    val lembarKe by viewModel.lembarKe.collectAsState()
+    val keterangan by viewModel.keterangan.collectAsState()
+    val cartItems by viewModel.cartItems.collectAsState()
+
+    // Build a live receipt object for the preview
+    val previewReceipt = remember(cartItems, kasirName, lembarKe, keterangan, design) {
+        com.dicoding.warmapos.data.model.Receipt(
+            kasir = kasirName,
+            storeName = design.storeName,
+            items = cartItems.map { com.dicoding.warmapos.data.model.ReceiptItem.fromCartItem(it) },
+            total = viewModel.cartTotal,
+            lembarKe = lembarKe,
+            keterangan = keterangan
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { 
+        title = {
             Text(
-                "📄 Preview Struk", 
+                "🧾 Preview Struk",
                 fontWeight = FontWeight.Bold
-            ) 
+            )
         },
         text = {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = RoundedCornerShape(8.dp)
+            Column(
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = preview,
-                    modifier = Modifier.padding(12.dp),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp
+                    "Ini adalah tampilan struk yang akan dicetak",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
+
+                // Visual receipt card with drop shadow effect
+                Card(
+                    modifier = Modifier.fillMaxWidth(0.92f),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    com.dicoding.warmapos.ui.components.ReceiptTemplate(
+                        receipt = previewReceipt,
+                        design = design,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
             Button(onClick = onSaveAndPrint, shape = RoundedCornerShape(8.dp)) {
-                Text("Simpan")
+                Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Simpan & Cetak")
             }
         },
         dismissButton = {
@@ -376,3 +410,4 @@ fun ReceiptPreviewDialog(
         }
     )
 }
+

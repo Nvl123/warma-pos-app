@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -372,7 +373,7 @@ private fun OcrContent(
             }
 
             // OCR Results items
-            items(ocrResults) { result ->
+            itemsIndexed(ocrResults) { index, result ->
                 OcrResultCard(
                     result = result,
                     onAddToCart = onAddToCart
@@ -459,7 +460,7 @@ private fun ManualInputContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(searchResults) { product ->
+            itemsIndexed(searchResults, key = { index, product -> "${index}_${product.name}_${product.price}" }) { _, product ->
                 ProductSearchCard(
                     product = product,
                     quantity = quantity.toIntOrNull() ?: 1,

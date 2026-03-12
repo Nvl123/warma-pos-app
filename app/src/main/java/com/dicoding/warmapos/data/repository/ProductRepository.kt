@@ -184,8 +184,11 @@ class ProductRepository(private val context: Context) {
 
     fun getProductCount(): Int = products.size
 
-    fun getProductByName(name: String): Product? {
-        return products.find { it.name.equals(name, ignoreCase = true) }
+    fun getProduct(name: String, price: Int? = null): Product? {
+        return products.find { 
+            it.name.equals(name, ignoreCase = true) && 
+            (price == null || it.price == price) 
+        }
     }
 
     fun clear() {
@@ -196,8 +199,8 @@ class ProductRepository(private val context: Context) {
     // ===== Product Management =====
     
     fun addProduct(product: Product): Boolean {
-        // Check if product with same name already exists
-        if (products.any { it.name.equals(product.name, ignoreCase = true) }) {
+        // Check if product with same name AND price already exists
+        if (products.any { it.name.equals(product.name, ignoreCase = true) && it.price == product.price }) {
             return false
         }
         products.add(product)
@@ -205,8 +208,8 @@ class ProductRepository(private val context: Context) {
         return true
     }
     
-    fun updateProduct(oldName: String, updatedProduct: Product): Boolean {
-        val index = products.indexOfFirst { it.name.equals(oldName, ignoreCase = true) }
+    fun updateProduct(oldName: String, oldPrice: Int, updatedProduct: Product): Boolean {
+        val index = products.indexOfFirst { it.name.equals(oldName, ignoreCase = true) && it.price == oldPrice }
         if (index >= 0) {
             products[index] = updatedProduct
             saveToInternalStorage()
@@ -215,8 +218,8 @@ class ProductRepository(private val context: Context) {
         return false
     }
     
-    fun deleteProduct(productName: String): Boolean {
-        val removed = products.removeAll { it.name.equals(productName, ignoreCase = true) }
+    fun deleteProduct(productName: String, productPrice: Int): Boolean {
+        val removed = products.removeAll { it.name.equals(productName, ignoreCase = true) && it.price == productPrice }
         if (removed) {
             saveToInternalStorage()
         }

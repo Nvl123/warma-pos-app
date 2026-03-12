@@ -1,5 +1,7 @@
 package com.dicoding.warmapos.bluetooth
 
+import android.graphics.Bitmap
+import android.graphics.Color
 /**
  * ESC/POS command builder for thermal printers
  */
@@ -171,6 +173,68 @@ class EscPosBuilder {
      */
     fun cut(partial: Boolean = true): EscPosBuilder {
         buffer.addAll(if (partial) CUT_PARTIAL.toList() else CUT_FULL.toList())
+        return this
+    }
+
+    /**
+     * Print a bitmap image using ESC/POS "GS v 0" raster bit image command.
+     * The bitmap is converted to 1-bit monochrome (black=1, white=0).
+     *
+     * @param bitmap        Source bitmap to print (will be scaled to fit paper width)
+     * @param maxWidthDots  Maximum printer dot width (384 for 58mm, 576 for 80mm)
+     */
+    fun printBitmap(bitmap: Bitmap, maxWidthDots: Int = 384): EscPosBuilder {
+        // Scale bitmap to fit within printer width
+        val scaledBitmap = if (bitmap.width > maxWidthDots) {
+            val aspectRatio = bitmap.height.toFloat() / bitmap.width.toFloat()
+            Bitmap.createScaledBitmap(bitmap, maxWidthDots, (maxWidthDots * aspectRatio).toInt(), true)
+        } else {
+            bitmap
+        }
+
+        val width = scaledBitmap.width
+        val height = scaledBitmap.height
+
+        // Width in bytes: each row is ceil(width / 8) bytes
+        val widthBytes = (width + 7) / 8
+
+        // GS v 0 command header:
+        // 1D 76 30 m xL xH yL yH
+        // m = 0 (normal density)
+        // xL, xH = columns in bytes (widthBytes) in little-endian
+        // yL, yH = number of rows (height) in little-endian
+        buffer.add(0x1D.toByte())
+        buffer.add(0x76.toByte())
+        buffer.add(0x30.toByte())
+        buffer.add(0x00.toByte())  // m = normal density
+        buffer.add((widthBytes and 0xFF).toByte())
+        buffer.add(((widthBytes shr 8) and 0xFF).toByte())
+        buffer.add((height and 0xFF).toByte())
+        buffer.add(((height shr 8) and 0xFF).toByte())
+
+        // Rasterize each row
+        for (row in 0 until height) {
+            for (byteIndex in 0 until widthBytes) {
+                var byte = 0
+                for (bit in 0 until 8) {
+                    val col = byteIndex * 8 + bit
+                    if (col < width) {
+                        val pixel = scaledBitmap.getPixel(col, row)
+                        // Black pixel (dark) → bit = 1
+                        val luminance = (Color.red(pixel) * 0.299 + Color.green(pixel) * 0.587 + Color.blue(pixel) * 0.114).toInt()
+                        if (luminance < 128) {
+                            byte = byte or (0x80 ushr bit)
+                        }
+                    }
+                }
+                buffer.add(byte.toByte())
+            }
+        }
+
+        if (scaledBitmap !== bitmap) {
+            scaledBitmap.recycle()
+        }
+
         return this
     }
 

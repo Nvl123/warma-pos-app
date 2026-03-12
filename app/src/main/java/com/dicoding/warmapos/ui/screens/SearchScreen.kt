@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -185,7 +186,7 @@ fun SearchScreen(
                 }
                 
                 // Product items (tanpa score)
-                items(searchResults, key = { it.sku }) { product ->
+                itemsIndexed(searchResults, key = { index, product -> "${index}_${product.name}_${product.price}" }) { _, product ->
                     SimpleProductCard(
                         product = product,
                         onAdd = { qty -> viewModel.addToCart(product, qty) }
