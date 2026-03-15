@@ -206,7 +206,7 @@ class ReceiptBitmapRenderer(private val context: Context) {
                 textSizePx = 28f,          // larger than before → each digit gets more dots on paper
                 tfLeft = typefaceRegular,
                 tfRight = typefaceSemiBold,
-                spacingAfter = 12f,
+                spacingAfter = 5f,
                 letterSpacingRight = 0.08f // key: spread digits for thermal clarity
             )
         }
