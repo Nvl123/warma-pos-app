@@ -191,7 +191,7 @@ class ReceiptBitmapRenderer(private val context: Context) {
 
         ops += SpaceOp(4)
         ops += DivOp(double = true)
-        ops += TextOp("─── DAFTAR BELANJA ───", 20f, typefaceSemiBold, Paint.Align.CENTER, 8f)
+        ops += TextOp("─── DAFTAR BARANG ───", 20f, typefaceSemiBold, Paint.Align.CENTER, 8f)
 
         // ── ITEMS (dynamic) ──────────────────────────────────────────
         for (item in receipt.items) {
