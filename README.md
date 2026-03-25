@@ -10,6 +10,19 @@ Aplikasi Point of Sale (POS) / Kasir modern untuk Android dengan fitur **OCR unt
 
 ---
 
+## 📱 Screenshot UI
+
+<p align="center">
+  <img src="[INSERT_URL_GAMBAR_1_DISINI]" width="220" alt="Dashboard / Home"/>
+  <img src="[INSERT_URL_GAMBAR_2_DISINI]" width="220" alt="POS / Keranjang"/>
+  <img src="[INSERT_URL_GAMBAR_3_DISINI]" width="220" alt="Manajemen Produk / Export"/>
+  <img src="[INSERT_URL_GAMBAR_4_DISINI]" width="220" alt="Scan OCR Struk"/>
+</p>
+
+*Catatan: Ganti placeholder URL gambar di atas dengan link screenshot aplikasi yang sebenarnya.*
+
+---
+
 ## ✨ Fitur Lengkap
 
 ### 📦 Manajemen Produk
@@ -17,8 +30,8 @@ Aplikasi Point of Sale (POS) / Kasir modern untuk Android dengan fitur **OCR unt
 - **CRUD Produk** - Tambah, edit, hapus produk dengan mudah
 - **Kategori Produk** - Organisasi produk berdasarkan kategori
 - **SKU & Barcode** - Dukungan kode SKU untuk identifikasi produk
-- **Import/Export CSV** - Import data produk dari file CSV atau export untuk backup
-- **Auto-detect CSV Format** - Mendukung berbagai format CSV (5 kolom atau 12 kolom)
+- **Import/Export Data** - Dukungan import produk dari CSV & Export lengkap ke format CSV, Excel XLSX, dan template native EPCOPOS
+- **Auto-detect Import** - Mendukung pembacaan berbagai format CSV (5 kolom atau 12 kolom)
 
 ### 🔍 Fuzzy Search (Pencarian Cerdas)
 
@@ -99,7 +112,7 @@ Mapping nama alternatif untuk produk:
 
 - **Create Backup** - Backup semua data ke file ZIP
 - **Restore Backup** - Pulihkan data dari file backup
-- **Export CSV** - Export produk ke format CSV
+- **Export Database** - Export produk ke format CSV, XLSX, atau layout sistem EPCOPOS
 
 ### 📑 Kelompok Struk (Group Receipts)
 
