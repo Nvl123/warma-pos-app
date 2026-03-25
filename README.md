@@ -12,14 +12,9 @@ Aplikasi Point of Sale (POS) / Kasir modern untuk Android dengan fitur **OCR unt
 
 ## 📱 Screenshot UI
 
-<p align="center">
-  <img src="[INSERT_URL_GAMBAR_1_DISINI]" width="220" alt="Dashboard / Home"/>
-  <img src="[INSERT_URL_GAMBAR_2_DISINI]" width="220" alt="POS / Keranjang"/>
-  <img src="[INSERT_URL_GAMBAR_3_DISINI]" width="220" alt="Manajemen Produk / Export"/>
-  <img src="[INSERT_URL_GAMBAR_4_DISINI]" width="220" alt="Scan OCR Struk"/>
-</p>
-
-*Catatan: Ganti placeholder URL gambar di atas dengan link screenshot aplikasi yang sebenarnya.*
+|input|Search|cart|Struk|Setting|
+|-----|-----|-----|-----|-----|
+![WhatsApp Image 2026-03-25 at 07 43 11 (1)](https://github.com/user-attachments/assets/d220c840-0ad0-4d97-be9b-cdb02f5c913e)| ![WhatsApp Image 2026-03-25 at 07 43 11](https://github.com/user-attachments/assets/868061bf-391b-4478-bb17-cb16d9709421) | ![WhatsApp Image 2026-03-25 at 07 43 10](https://github.com/user-attachments/assets/a6e22181-dcb6-461e-9bc3-bd3156943c08) | ![WhatsApp Image 2026-03-25 at 07 43 09](https://github.com/user-attachments/assets/e4bf72c5-a9cc-49cf-b566-0f65016dbc20) | ![WhatsApp Image 2026-03-25 at 07 43 08](https://github.com/user-attachments/assets/3e240711-7ba3-4670-bd4c-61486008a2b4) |
 
 ---
 
