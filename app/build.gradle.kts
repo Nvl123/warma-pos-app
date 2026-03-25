@@ -76,6 +76,8 @@ dependencies {
     // ML Kit Text Recognition (offline OCR)
     implementation("com.google.mlkit:text-recognition:16.0.0")
 
+
+
     // Debug
     debugImplementation(libs.androidx.ui.tooling)
 

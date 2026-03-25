@@ -4,6 +4,8 @@ import android.content.Context
 import com.dicoding.warmapos.data.model.Product
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import com.dicoding.warmapos.utils.XlsxWriter
+import com.dicoding.warmapos.utils.EpcoposXlsxWriter
 
 /**
  * Repository for managing product data from CSV
@@ -241,6 +243,25 @@ class ProductRepository(private val context: Context) {
     }
     
     /**
+     * Export products to XLSX file
+     */
+    fun exportToXlsx(file: java.io.File): Boolean {
+        val rows = mutableListOf<List<String>>()
+        rows.add(listOf("Name", "SKU", "Category", "Price", "Unit"))
+        products.forEach { p ->
+            rows.add(listOf(p.name, p.sku, p.category, p.price.toString(), p.unit))
+        }
+        return XlsxWriter.write(file, rows)
+    }
+    
+    /**
+     * Export products to EPCOPOS XLSX format
+     */
+    fun exportToEpcopos(file: java.io.File): Boolean {
+        return EpcoposXlsxWriter.write(file, products)
+    }
+    
+    /**
      * Save products to internal storage (for persistence after edits)
      */
     private fun saveToInternalStorage() {
@@ -279,15 +300,26 @@ class ProductRepository(private val context: Context) {
     }
     
     /**
-     * Export CSV file to external storage for sharing
+     * Export file to external storage for sharing
+     * format: "CSV", "XLSX", or "EPCOPOS"
      */
-    fun exportToExternalFile(): java.io.File? {
+    fun exportToExternalFile(format: String = "CSV"): java.io.File? {
         return try {
-            val csvContent = exportToCsv()
             val exportDir = context.getExternalFilesDir(null) ?: return null
-            val file = java.io.File(exportDir, "warmapos_products_${System.currentTimeMillis()}.csv")
-            file.writeText(csvContent)
-            file
+            val timestamp = System.currentTimeMillis()
+            
+            if (format.equals("XLSX", ignoreCase = true)) {
+                val file = java.io.File(exportDir, "warmapos_products_$timestamp.xlsx")
+                if (exportToXlsx(file)) file else null
+            } else if (format.equals("EPCOPOS", ignoreCase = true)) {
+                val file = java.io.File(exportDir, "warmapos_epcopos_$timestamp.xlsx")
+                if (exportToEpcopos(file)) file else null
+            } else {
+                val csvContent = exportToCsv()
+                val file = java.io.File(exportDir, "warmapos_products_$timestamp.csv")
+                file.writeText(csvContent)
+                file
+            }
         } catch (e: Exception) {
             e.printStackTrace()
             null

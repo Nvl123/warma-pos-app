@@ -1030,8 +1030,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return success
     }
     
-    fun exportProducts(): java.io.File? {
-        return productRepository.exportToExternalFile()
+    fun exportProducts(format: String = "CSV"): java.io.File? {
+        return productRepository.exportToExternalFile(format)
     }
     
     private fun refreshProducts() {

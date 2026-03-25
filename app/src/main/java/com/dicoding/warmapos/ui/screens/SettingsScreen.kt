@@ -888,6 +888,7 @@ fun ProductManagementSection(
     var showEditDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<com.dicoding.warmapos.data.model.Product?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var showExportDialog by remember { mutableStateOf(false) }
     
     // Filter products by search - use derivedStateOf for proper reactivity
     val filteredProducts by remember {
@@ -914,22 +915,7 @@ fun ProductManagementSection(
             }
             
             OutlinedButton(
-                onClick = {
-                    val file = viewModel.exportProducts()
-                    if (file != null) {
-                        val uri = androidx.core.content.FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.provider",
-                            file
-                        )
-                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(android.content.Intent.createChooser(intent, "Share CSV"))
-                    }
-                },
+                onClick = { showExportDialog = true },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(8.dp)
             ) {
@@ -1033,6 +1019,36 @@ fun ProductManagementSection(
             }
         )
     }
+    
+    // Export Format Dialog
+    if (showExportDialog) {
+        ExportFormatDialog(
+            onDismiss = { showExportDialog = false },
+            onExport = { format ->
+                showExportDialog = false
+                val file = viewModel.exportProducts(format)
+                if (file != null) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.provider",
+                        file
+                    )
+                    val mimeType = when (format) {
+                        "XLSX" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "EPCOPOS" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        else -> "text/csv"
+                    }
+                    
+                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = mimeType
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(intent, "Share $format"))
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1107,6 +1123,84 @@ fun ProductFormDialog(
                 Text("Simpan")
             }
         },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Batal")
+            }
+        }
+    )
+}
+
+@Composable
+fun ExportFormatDialog(
+    onDismiss: () -> Unit,
+    onExport: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pilih Format Export", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Pilih format file untuk mengekspor data produk:")
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // CSV Option
+                    Card(
+                        modifier = Modifier.weight(1f).clickable { onExport("CSV") },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(8.dp))
+                            Text("CSV", fontWeight = FontWeight.Bold)
+                            Text("Teks Terpisah", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    
+                    // XLSX Option
+                    Card(
+                        modifier = Modifier.weight(1f).clickable { onExport("XLSX") },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.TableChart, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(8.dp))
+                            Text("XLSX", fontWeight = FontWeight.Bold)
+                            Text("Excel Modern", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    // EPCOPOS Option
+                    Card(
+                        modifier = Modifier.weight(1f).clickable { onExport("EPCOPOS") },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.Storefront, null, tint = MaterialTheme.colorScheme.secondary)
+                            Spacer(Modifier.height(8.dp))
+                            Text("EPCOPOS", fontWeight = FontWeight.Bold)
+                            Text("Template", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("Batal")
